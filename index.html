@@ -739,7 +739,7 @@ const gameDiv = document.createElement("div");
 gameDiv.style.width = "640px";
 gameDiv.style.height = "480px";
 gameDiv.style.position = "relative";
-gameDiv.style.pointerEvents = "auto";
+gameDiv.style.pointerEvents = "none"; /* click-through until focused */
 gameDiv.style.overflow = "hidden";
 const gameFrame = document.createElement("iframe");
 gameFrame.src = "solitaire-win2000.html";
@@ -1038,8 +1038,10 @@ function animate(){
   }
 
   /* the CRT belongs to the game page: overlay on while powered,
-     canvas display stays dark glass behind it */
+     canvas display stays dark glass behind it.
+     Click-through until focused, playable once inside. */
   gameObj.visible = crt.S.power;
+  gameDiv.style.pointerEvents = (focused === "crt") ? "auto" : "none";
   crt.display.visible = false;
 
   renderer.render(scene, camera);
