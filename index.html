@@ -17,8 +17,9 @@
   #exitBtn{position:fixed;left:50%;bottom:52px;transform:translateX(-50%);
     display:none;z-index:11;background:#e8edf3;color:#0b0e13;border:0;border-radius:999px;
     padding:10px 20px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
-  #exitBtn.show{display:block}
+  #exitBtn.show{display:none} /* exit pill removed — Esc exits, the interface is the hint */
   #title{position:fixed;top:22px;left:50%;transform:translateX(-50%);
+    display:none; /* title watermark removed */
     font:11px/1.4 Arial,sans-serif;letter-spacing:.35em;text-transform:uppercase;
     color:rgba(255,255,255,.30);pointer-events:none;user-select:none;z-index:10;
     transition:opacity 1s}
