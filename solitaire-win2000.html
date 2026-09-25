@@ -1,0 +1,731 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Windows 2000 Solitaire</title>
+<style>
+  :root{
+    --card-w:86px;
+    --card-h:120px;
+    --fan:28px;
+    --felt-1:#1d6c3c;
+    --felt-2:#0d4f2a;
+    --ui-font:"Segoe UI",Tahoma,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    overflow:hidden;
+    font-family:var(--ui-font);
+    color:#111;
+    background:
+      radial-gradient(1200px 700px at 38% 28%, rgba(190,220,255,.32), transparent 58%),
+      linear-gradient(160deg,#4c7497 0%,#21384f 52%,#101d2a 100%);
+  }
+  body:before{
+    content:""; position:fixed; inset:0; pointer-events:none; opacity:.28;
+    background:linear-gradient(120deg,transparent 0 48%,rgba(255,255,255,.06) 50%,transparent 52% 100%);
+  }
+  button{font:inherit}
+  #desktop{height:100%;display:grid;place-items:center;padding:28px}
+  .window{
+    width:min(1180px,96vw); height:min(790px,94vh); min-height:620px;
+    border:1px solid rgba(255,255,255,.55); border-radius:10px 10px 4px 4px;
+    box-shadow:0 30px 65px rgba(0,0,0,.46), 0 0 0 1px rgba(0,0,0,.35) inset;
+    overflow:hidden; position:relative;
+    background:rgba(230,242,252,.22);
+    backdrop-filter:blur(16px) saturate(140%);
+  }
+  .titlebar{
+    height:36px; display:flex; align-items:center; padding-left:12px;
+    background:
+      linear-gradient(to bottom,rgba(255,255,255,.72),rgba(202,223,240,.52) 44%,rgba(114,151,181,.48) 45%,rgba(255,255,255,.10));
+    border-bottom:1px solid rgba(30,57,78,.55);
+    text-shadow:0 1px 0 rgba(255,255,255,.9);
+    user-select:none;
+  }
+  .app-icon{width:18px;height:18px;border-radius:3px;margin-right:8px;position:relative;box-shadow:0 0 0 1px rgba(0,0,0,.35)}
+  .app-icon:before,.app-icon:after{content:"";position:absolute;width:7px;height:7px;border-radius:1px}
+  .app-icon:before{left:2px;top:2px;background:#d3263f;box-shadow:8px 0 #2f86d9,0 8px #3a9e51,8px 8px #f0b51b}
+  .title{font-size:13px;font-weight:600;letter-spacing:.01em}
+  .window-controls{margin-left:auto;align-self:stretch;display:flex;margin-right:6px}
+  .window-controls button{width:46px;border:0;border-left:1px solid rgba(255,255,255,.32);background:linear-gradient(#eef8ff99,#8eb5d766);font-size:14px;color:#10283c}
+  .window-controls button:hover{background:linear-gradient(#fff,#add7f2)}
+  .window-controls .close:hover{background:linear-gradient(#f48d7d,#b62517);color:white;text-shadow:0 -1px rgba(0,0,0,.4)}
+  .menubar{
+    height:28px; display:flex; align-items:center; gap:2px; padding:0 8px;
+    background:linear-gradient(#f8fbfdda,#dbe8f1d8); border-bottom:1px solid #879bab; position:relative; z-index:40;
+  }
+  .menu-wrap{position:relative}
+  .menu-btn{border:1px solid transparent;background:transparent;padding:3px 8px;border-radius:2px;font-size:12px}
+  .menu-btn:hover,.menu-btn.active{border-color:#8bb2d1;background:linear-gradient(#fff,#cfe7f8)}
+  .dropdown{
+    display:none; position:absolute; top:25px; left:0; width:190px; padding:4px;
+    background:rgba(249,252,255,.97);border:1px solid #7f94a4;box-shadow:0 8px 20px rgba(0,0,0,.28);border-radius:2px;
+  }
+  .dropdown.open{display:block}
+  .menu-item{width:100%;height:26px;border:0;background:transparent;text-align:left;padding:0 10px 0 28px;font-size:12px;position:relative}
+  .menu-item:hover{background:linear-gradient(#e8f5ff,#c9e7fb);outline:1px solid #8bbce0}
+  .menu-item.check.on:before{content:"✓";position:absolute;left:8px;top:3px;font-weight:bold}
+  .separator{height:1px;background:#c9d2d9;margin:4px 3px}
+  .board{
+    position:absolute; left:0; right:0; top:64px; bottom:23px; overflow:hidden;
+    background:
+      radial-gradient(800px 430px at 50% 34%, rgba(92,166,112,.22), transparent 65%),
+      radial-gradient(1200px 700px at 50% 55%, transparent 48%, rgba(0,0,0,.18) 100%),
+      repeating-linear-gradient(0deg,rgba(255,255,255,.012) 0 1px,rgba(0,0,0,.012) 1px 2px),
+      linear-gradient(180deg,var(--felt-1),var(--felt-2));
+  }
+  .board-inner{position:relative;width:min(1000px,calc(100% - 40px));height:100%;margin:0 auto;padding-top:24px}
+  .top-row,.tableau-row{display:grid;grid-template-columns:repeat(7,var(--card-w));gap:26px;justify-content:center}
+  .top-row{height:150px}
+  .spacer{grid-column:3 / 4}
+  .slot,.pile{width:var(--card-w);height:var(--card-h);position:relative;border-radius:8px}
+  .slot{border:1px solid rgba(255,255,255,.24);box-shadow:0 1px 0 rgba(0,0,0,.22) inset,0 0 0 1px rgba(0,0,0,.06);background:rgba(255,255,255,.025)}
+  .slot.foundation:after{content:attr(data-symbol);position:absolute;inset:0;display:grid;place-items:center;color:rgba(255,255,255,.12);font:46px Georgia,serif}
+  .tableau-row{align-items:start;position:relative}
+  .tableau{width:var(--card-w);min-height:var(--card-h);position:relative}
+  .tableau.empty:before{content:"";position:absolute;width:100%;height:var(--card-h);border-radius:8px;border:1px solid rgba(255,255,255,.13);background:rgba(0,0,0,.025)}
+  .card{
+    position:absolute;width:var(--card-w);height:var(--card-h);border-radius:8px;user-select:none;touch-action:none;
+    transition:transform .13s cubic-bezier(.2,.72,.2,1),box-shadow .13s ease;
+    box-shadow:0 2px 3px rgba(0,0,0,.34),inset 0 1px rgba(255,255,255,.8);
+  }
+  .card.face-up{background:linear-gradient(145deg,#fffefb,#f4f1ea);border:1px solid #c8c6c0}
+  .card.face-down{border:1px solid #d4dff2;background:
+    linear-gradient(45deg,rgba(255,255,255,.08) 25%,transparent 25% 75%,rgba(255,255,255,.08) 75%),
+    linear-gradient(-45deg,rgba(255,255,255,.06) 25%,transparent 25% 75%,rgba(255,255,255,.06) 75%),
+    radial-gradient(circle at 50% 45%,#3764ad 0 8%,#24487d 9% 21%,#163766 22% 100%);
+    background-size:12px 12px,12px 12px,100% 100%;
+    box-shadow:0 2px 4px rgba(0,0,0,.38),inset 0 0 0 4px #d8e3f6,inset 0 0 0 6px #335f9e;
+  }
+  .corner{position:absolute;left:6px;top:4px;font-family:Georgia,serif;font-weight:bold;font-size:20px;line-height:17px;text-align:center}
+  .corner small{display:block;font-size:17px}
+  .center-suit{position:absolute;inset:0;display:grid;place-items:center;font:44px Georgia,serif;opacity:.94}
+  .red{color:#bf2131}.black{color:#171717}
+  .card.selected{transform:translateY(-6px);box-shadow:0 7px 14px rgba(0,0,0,.42),0 0 0 2px rgba(183,224,255,.95)}
+  .card.hint{animation:hintPulse .7s ease-in-out 2}
+  @keyframes hintPulse{50%{filter:brightness(1.15);box-shadow:0 0 0 4px rgba(255,244,155,.72),0 8px 16px rgba(0,0,0,.35)}}
+  .stock-card{inset:0;cursor:pointer}.waste-card,.foundation-card{inset:0}
+  .drag-layer{position:fixed;left:0;top:0;pointer-events:none;z-index:9999}
+  .drag-card{position:absolute;transition:none!important;box-shadow:0 14px 28px rgba(0,0,0,.45)!important}
+  .drag-origin{opacity:0!important;pointer-events:none!important}
+  .statusbar{position:absolute;left:0;right:0;bottom:0;height:23px;background:linear-gradient(#eff5f9,#cbd9e3);border-top:1px solid #7e919f;display:flex;align-items:center;padding:0 10px;font-size:11px;color:#263947;gap:22px}
+  .statusbar span+span{border-left:1px solid rgba(82,100,114,.3);padding-left:14px}
+  .modal-backdrop{display:none;position:absolute;inset:64px 0 23px;background:rgba(7,19,28,.18);z-index:100;align-items:center;justify-content:center}
+  .modal-backdrop.show{display:flex}
+  .dialog{width:360px;background:linear-gradient(#f8fbfd,#e3edf3);border:1px solid #597286;border-radius:6px;box-shadow:0 20px 48px rgba(0,0,0,.45),inset 0 1px white;overflow:hidden}
+  .dialog-title{height:31px;padding:7px 10px;font-size:12px;font-weight:600;background:linear-gradient(#fdfefe,#bfd8e9);border-bottom:1px solid #92aabb}
+  .dialog-body{padding:20px 20px 12px;font-size:13px;line-height:1.45}
+  .dialog-actions{display:flex;justify-content:flex-end;gap:8px;padding:10px 14px 14px}
+  .vista-btn{min-width:80px;padding:5px 12px;border-radius:3px;border:1px solid #718a9c;background:linear-gradient(#fff,#d8e8f2);box-shadow:inset 0 1px white}
+  .vista-btn:hover{background:linear-gradient(#fff,#c6e5f7)}
+  .shake{animation:shake .2s ease}
+  @keyframes shake{25%{transform:translateX(-4px)}50%{transform:translateX(4px)}75%{transform:translateX(-2px)}}
+  .win-card{position:absolute;width:var(--card-w);height:var(--card-h);border-radius:8px;z-index:80;pointer-events:none}
+  .about{font-size:12px;color:#334b5b}
+  @media (max-width:900px){
+    :root{--card-w:72px;--card-h:101px;--fan:24px}
+    .top-row,.tableau-row{gap:16px}
+    .board-inner{width:calc(100% - 16px)}
+  }
+
+
+
+/* --- WINDOWS 2000 DESKTOP PASS ---------------------------------------
+   Classic desktop UI: beveled chrome, teal desktop, visible icons,
+   and the Solitaire app floating as a regular program window. */
+:root{
+  --card-w:74px;
+  --card-h:104px;
+  --fan:24px;
+  --felt-1:#0a7b36;
+  --felt-2:#0b632f;
+  --ui-font:Tahoma,"MS Sans Serif",Arial,sans-serif;
+}
+html,body{
+  background:#3a6ea5;
+}
+body{
+  background:linear-gradient(#4b7caf,#3a6ea5 48%, #36699e 100%);
+  image-rendering:auto;
+}
+body:before{display:none;}
+#desktop{
+  position:relative;
+  width:100vw;
+  height:100vh;
+  overflow:hidden;
+  padding:0;
+  display:block;
+}
+.desktop-surface{
+  position:absolute;
+  inset:0 0 28px 0;
+  background:linear-gradient(180deg,#4a83b7 0%,#3e77ad 18%,#3a6ea5 100%);
+}
+.desktop-icons{
+  position:absolute;
+  left:12px;
+  top:10px;
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+  z-index:1;
+}
+.desktop-icon{
+  width:74px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:5px;
+  color:#fff;
+  text-align:center;
+  font-size:11px;
+  line-height:1.15;
+  text-shadow:1px 1px 0 rgba(0,0,0,.55);
+  user-select:none;
+}
+.desktop-icon .icon-art{
+  width:32px;
+  height:32px;
+  position:relative;
+}
+.desktop-icon .label{
+  background:transparent;
+  padding:1px 3px;
+}
+.desktop-icon.arachnid .icon-art:before{
+  content:"🕷";
+  position:absolute;
+  inset:0;
+  display:grid;
+  place-items:center;
+  font-size:28px;
+  filter:drop-shadow(1px 1px 0 rgba(0,0,0,.35));
+}
+.desktop-icon.pdf .icon-art{
+  background:#fff;
+  border:1px solid #111;
+  box-shadow:1px 1px 0 rgba(0,0,0,.35);
+}
+.desktop-icon.pdf .icon-art:before{
+  content:"";
+  position:absolute;
+  right:-1px;
+  top:-1px;
+  border-width:0 0 11px 11px;
+  border-style:solid;
+  border-color:transparent transparent #d8d8d8 transparent;
+}
+.desktop-icon.pdf .icon-art:after{
+  content:"PDF";
+  position:absolute;
+  left:4px;
+  bottom:4px;
+  font:bold 10px Tahoma,Arial,sans-serif;
+  color:#b10000;
+}
+.taskbar{
+  position:absolute;
+  left:0; right:0; bottom:0;
+  height:28px;
+  background:#d4d0c8;
+  border-top:1px solid #fff;
+  box-shadow:inset 0 1px 0 #f5f5f5;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  padding:3px 5px;
+  z-index:20;
+}
+.start-btn,
+.task-button,
+.tray-clock{
+  height:22px;
+  border:1px solid #fff;
+  border-right-color:#404040;
+  border-bottom-color:#404040;
+  background:#d4d0c8;
+  color:#000;
+  font:11px Tahoma,Arial,sans-serif;
+  box-shadow:1px 1px 0 #808080 inset;
+}
+.start-btn{
+  min-width:62px;
+  padding:0 10px;
+  font-weight:700;
+}
+.task-button{
+  min-width:140px;
+  padding:0 10px;
+  text-align:left;
+}
+.tray-clock{
+  margin-left:auto;
+  min-width:58px;
+  padding:0 8px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.window{
+  width:min(980px, calc(100vw - 150px));
+  height:min(710px, calc(100vh - 62px));
+  min-height:585px;
+  position:absolute;
+  left:110px;
+  top:20px;
+  border:2px solid #d4d0c8;
+  border-right-color:#404040;
+  border-bottom-color:#404040;
+  border-radius:0;
+  box-shadow:1px 1px 0 #808080;
+  background:#d4d0c8;
+  backdrop-filter:none;
+  overflow:hidden;
+  z-index:5;
+}
+.titlebar{
+  height:28px;
+  padding-left:6px;
+  color:#fff;
+  background:linear-gradient(90deg,#0a246a,#1f5fae 72%,#3f87d7);
+  border-bottom:1px solid #808080;
+  text-shadow:none;
+}
+.app-icon{
+  width:16px;height:16px;margin-right:5px;border-radius:0;
+  background:#fff;border:1px solid #111;box-shadow:none;
+}
+.app-icon:before,.app-icon:after{display:none;}
+.title{font-size:11px;font-weight:700;letter-spacing:0}
+.window-controls{align-self:auto;height:22px;margin-right:3px;gap:2px;display:flex;align-items:center}
+.window-controls button{
+  width:23px;height:21px;padding:0;
+  border:1px solid #fff;
+  border-right-color:#404040;
+  border-bottom-color:#404040;
+  background:#d4d0c8;
+  color:#000;
+  font:bold 12px Tahoma,Arial,sans-serif;
+  box-shadow:1px 1px 0 #808080 inset;
+}
+.window-controls button:hover,
+.window-controls .close:hover{background:#d4d0c8;color:#000;text-shadow:none;}
+.window-controls button:active{
+  border-color:#404040 #fff #fff #404040;
+  padding:1px 0 0 1px;
+}
+.menubar{
+  height:24px;padding:0 4px;gap:0;
+  background:#d4d0c8;
+  border-top:1px solid #fff;
+  border-bottom:1px solid #808080;
+}
+.menu-btn{padding:3px 7px;border:1px solid transparent;border-radius:0;font-size:11px}
+.menu-btn:hover,.menu-btn.active{
+  border:1px solid #fff;border-right-color:#808080;border-bottom-color:#808080;
+  background:#d4d0c8;
+}
+.dropdown{
+  top:21px;width:176px;padding:2px;
+  border:1px solid #fff;border-right-color:#404040;border-bottom-color:#404040;
+  border-radius:0;background:#d4d0c8;
+  box-shadow:2px 2px 0 rgba(0,0,0,.35);
+}
+.menu-item{height:23px;padding-left:24px;font-size:11px}
+.menu-item:hover{background:#0a246a;color:#fff;outline:none}
+.separator{background:#808080;border-bottom:1px solid #fff;margin:3px 2px}
+.board{
+  top:52px;bottom:20px;
+  background:
+    repeating-linear-gradient(90deg,rgba(255,255,255,.012) 0 1px,transparent 1px 5px),
+    #0a7b36;
+  border-top:1px solid #404040;
+}
+.board-inner{width:min(900px,calc(100% - 28px));padding-top:18px}
+.top-row,.tableau-row{gap:22px}
+.top-row{height:132px}
+.tableau-row{height:calc(100% - 132px);}
+.tableau{height:100%;}
+.slot,.pile{border-radius:2px}
+.slot{
+  border:1px solid rgba(0,0,0,.32);
+  border-right-color:rgba(255,255,255,.18);
+  border-bottom-color:rgba(255,255,255,.18);
+  box-shadow:none;background:transparent;
+}
+.slot.foundation:after{color:rgba(0,0,0,.20);font-size:39px}
+.tableau.empty:before{border-radius:2px;border:1px solid rgba(0,0,0,.24);background:transparent;}
+.card{border-radius:3px;transition:none;box-shadow:1px 2px 1px rgba(0,0,0,.50);}
+.card.face-up{background:#fff;border:1px solid #111;box-shadow:1px 2px 0 rgba(0,0,0,.42)}
+.card.face-down{
+  border:2px solid #fff;
+  background-color:#154b9b;
+  background-image:
+    repeating-linear-gradient(45deg,rgba(255,255,255,.18) 0 1px,transparent 1px 4px),
+    repeating-linear-gradient(-45deg,rgba(0,0,0,.16) 0 1px,transparent 1px 4px);
+  box-shadow:0 0 0 1px #111,1px 2px 0 rgba(0,0,0,.4);
+}
+.corner{left:4px;top:3px;font-family:"Times New Roman",serif;font-size:18px;line-height:15px}
+.corner small{font-size:15px}
+.center-suit{font-family:"Times New Roman",serif;font-size:39px}
+.red{color:#c00000}.black{color:#000}
+.card.selected{transform:none;outline:1px dotted #000;outline-offset:-4px;box-shadow:1px 2px 0 rgba(0,0,0,.42)}
+.card.hint{animation:jankyHint .38s steps(1,end) 4}
+@keyframes jankyHint{50%{filter:invert(1)}}
+.drag-card{box-shadow:3px 4px 0 rgba(0,0,0,.45)!important}
+.statusbar{
+  height:20px;padding:2px 4px;gap:0;
+  background:#d4d0c8;
+  border-top:1px solid #fff;
+  color:#111;font-size:10px;
+}
+.statusbar span{
+  min-width:92px;height:16px;line-height:14px;padding:0 5px;
+  border:1px solid #808080;border-right-color:#fff;border-bottom-color:#fff;
+}
+.statusbar span+span{border-left:1px solid #808080;padding-left:5px}
+.modal-backdrop{inset:52px 0 20px;background:rgba(0,0,0,.12)}
+.dialog{
+  width:330px;background:#d4d0c8;
+  border:2px solid #fff;border-right-color:#404040;border-bottom-color:#404040;
+  border-radius:0;box-shadow:3px 3px 0 rgba(0,0,0,.45);
+}
+.dialog-title{height:24px;padding:4px 5px;color:#fff;font-size:11px;font-weight:700;background:#0a246a;border:0}
+.dialog-body{padding:16px 14px 12px;font-size:11px;line-height:1.35}
+.dialog-actions{padding:7px 10px 10px;gap:6px}
+.vista-btn{
+  min-width:76px;padding:3px 10px;border-radius:0;
+  border:1px solid #fff;border-right-color:#404040;border-bottom-color:#404040;
+  background:#d4d0c8;box-shadow:none;font-size:11px;
+}
+.vista-btn:hover{background:#d4d0c8}
+.vista-btn:active{border-color:#404040 #fff #fff #404040;padding:4px 9px 2px 11px}
+.win-card{border-radius:3px}
+.about{font-size:11px;color:#111}
+@media (max-width:1000px){
+  .window{left:92px;width:calc(100vw - 104px);}
+}
+@media (max-width:900px){
+  :root{--card-w:66px;--card-h:92px;--fan:22px}
+  .desktop-icons{left:8px;top:8px;gap:10px}
+  .desktop-icon{width:60px;font-size:10px}
+  .desktop-icon .icon-art{width:28px;height:28px}
+  .window{left:74px; top:16px; width:calc(100vw - 82px); height:calc(100vh - 48px)}
+  .top-row,.tableau-row{gap:12px}
+  .board-inner{width:calc(100% - 16px)}
+  .task-button{min-width:100px}
+}
+</style>
+</head>
+<body>
+<div id="desktop">
+  <div class="desktop-surface"></div>
+  <div class="desktop-icons" aria-hidden="true">
+    <div class="desktop-icon arachnid">
+      <div class="icon-art"></div>
+      <div class="label">Arachnid</div>
+    </div>
+    <div class="desktop-icon pdf">
+      <div class="icon-art"></div>
+      <div class="label">rx.pdf</div>
+    </div>
+  </div>
+  <div class="window" id="appWindow">
+    <div class="titlebar">
+      <div class="app-icon" aria-hidden="true"></div><div class="title">Solitaire</div>
+      <div class="window-controls"><button aria-label="Minimize">—</button><button aria-label="Maximize">□</button><button class="close" aria-label="Close">×</button></div>
+    </div>
+    <div class="menubar">
+      <div class="menu-wrap"><button class="menu-btn" data-menu="gameMenu">Game</button>
+        <div class="dropdown" id="gameMenu">
+          <button class="menu-item" data-action="new">New Game</button>
+          <button class="menu-item" data-action="restart">Restart This Game</button>
+          <button class="menu-item" data-action="undo">Undo</button>
+          <button class="menu-item" data-action="hint">Hint</button>
+          <div class="separator"></div>
+          <button class="menu-item" data-action="exit">Exit</button>
+        </div>
+      </div>
+      <div class="menu-wrap"><button class="menu-btn" data-menu="optionsMenu">Options</button>
+        <div class="dropdown" id="optionsMenu">
+          <button class="menu-item check on" id="draw1Item" data-action="draw1">Draw One</button>
+          <button class="menu-item check" id="draw3Item" data-action="draw3">Draw Three</button>
+          <button class="menu-item check on" id="autoItem" data-action="auto">Auto Finish</button>
+          <button class="menu-item check on" id="soundItem" data-action="sound">Sound</button>
+          <button class="menu-item check on" id="animItem" data-action="animations">Animations</button>
+        </div>
+      </div>
+      <div class="menu-wrap"><button class="menu-btn" data-menu="helpMenu">Help</button>
+        <div class="dropdown" id="helpMenu">
+          <button class="menu-item" data-action="how">How to Play</button>
+          <button class="menu-item" data-action="about">About Solitaire</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="board" id="board">
+      <div class="board-inner">
+        <div class="top-row">
+          <div class="pile slot" id="stock"></div>
+          <div class="pile slot" id="waste"></div>
+          <div></div>
+          <div class="pile slot foundation" data-symbol="♠" data-foundation="0"></div>
+          <div class="pile slot foundation" data-symbol="♥" data-foundation="1"></div>
+          <div class="pile slot foundation" data-symbol="♦" data-foundation="2"></div>
+          <div class="pile slot foundation" data-symbol="♣" data-foundation="3"></div>
+        </div>
+        <div class="tableau-row" id="tableauRow">
+          <div class="tableau" data-col="0"></div><div class="tableau" data-col="1"></div><div class="tableau" data-col="2"></div><div class="tableau" data-col="3"></div><div class="tableau" data-col="4"></div><div class="tableau" data-col="5"></div><div class="tableau" data-col="6"></div>
+        </div>
+      </div>
+    </div>
+    <div class="statusbar"><span id="scoreText">Score: 0</span><span id="timeText">Time: 00:00</span><span id="movesText">Moves: 0</span></div>
+
+    <div class="modal-backdrop" id="modal"><div class="dialog"><div class="dialog-title" id="dialogTitle">Solitaire</div><div class="dialog-body" id="dialogBody"></div><div class="dialog-actions" id="dialogActions"></div></div></div>
+  </div>
+  <div class="taskbar" aria-hidden="true">
+    <button class="start-btn">Start</button>
+    <button class="task-button">Solitaire</button>
+    <div class="tray-clock">3:00 PM</div>
+  </div>
+</div>
+<div class="drag-layer" id="dragLayer"></div>
+<script>
+(() => {
+  const SUITS = ["spades","hearts","diamonds","clubs"];
+  const SYMBOL = {spades:"♠",hearts:"♥",diamonds:"♦",clubs:"♣"};
+  const RED = new Set(["hearts","diamonds"]);
+  const RANK_LABEL = {1:"A",11:"J",12:"Q",13:"K"};
+  const $ = (s,r=document)=>r.querySelector(s);
+  const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
+  const clone = v => JSON.parse(JSON.stringify(v));
+  let timer = null, startEpoch = 0, elapsedBefore = 0, seedState = null;
+  let selected = null, drag = null, audioCtx = null;
+  let settings = {draw:1, autoFinish:true, sound:true, animations:true};
+  let state;
+
+  function newDeck(){
+    const d=[]; for(const suit of SUITS) for(let rank=1;rank<=13;rank++) d.push({id:`${suit}-${rank}-${Math.random().toString(36).slice(2,7)}`,suit,rank,faceUp:false});
+    for(let i=d.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[d[i],d[j]]=[d[j],d[i]]}
+    return d;
+  }
+  function freshState(deck=newDeck()){
+    const s={stock:[],waste:[],tableau:Array.from({length:7},()=>[]),foundations:Array.from({length:4},()=>[]),score:0,moves:0,history:[],gameStatus:"playing"};
+    let k=0; for(let c=0;c<7;c++){ for(let r=0;r<=c;r++){ const card=deck[k++]; card.faceUp=r===c; s.tableau[c].push(card);} }
+    s.stock=deck.slice(k).map(c=>({...c,faceUp:false})); return s;
+  }
+  function snapshot(){ return {stock:clone(state.stock),waste:clone(state.waste),tableau:clone(state.tableau),foundations:clone(state.foundations),score:state.score,moves:state.moves,elapsed:elapsedSeconds()}; }
+  function pushHistory(){ state.history.push(snapshot()); if(state.history.length>150) state.history.shift(); }
+  function restore(s){ state.stock=s.stock;state.waste=s.waste;state.tableau=s.tableau;state.foundations=s.foundations;state.score=s.score;state.moves=s.moves; elapsedBefore=s.elapsed||0; startEpoch=Date.now(); selected=null; render(); }
+  function elapsedSeconds(){ return Math.floor(elapsedBefore + (Date.now()-startEpoch)/1000); }
+  function startTimer(){ clearInterval(timer); startEpoch=Date.now(); timer=setInterval(updateStatus,500); }
+  function updateStatus(){
+    const sec=elapsedSeconds(),m=Math.floor(sec/60),s=sec%60;
+    $('#scoreText').textContent=`Score: ${state.score}`; $('#movesText').textContent=`Moves: ${state.moves}`; $('#timeText').textContent=`Time: ${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  }
+  function cardEl(card){
+    const el=document.createElement('div'); el.className=`card ${card.faceUp?'face-up':'face-down'} ${RED.has(card.suit)?'red':'black'}`; el.dataset.id=card.id;
+    if(card.faceUp){ const rank=RANK_LABEL[card.rank]||card.rank; el.innerHTML=`<div class="corner">${rank}<small>${SYMBOL[card.suit]}</small></div><div class="center-suit">${SYMBOL[card.suit]}</div>`; }
+    return el;
+  }
+  function findCard(id){
+    for(let c=0;c<7;c++){let i=state.tableau[c].findIndex(x=>x.id===id);if(i>=0)return{zone:'tableau',col:c,index:i,card:state.tableau[c][i]}}
+    let i=state.waste.findIndex(x=>x.id===id);if(i>=0)return{zone:'waste',index:i,card:state.waste[i]};
+    for(let f=0;f<4;f++){i=state.foundations[f].findIndex(x=>x.id===id);if(i>=0)return{zone:'foundation',foundation:f,index:i,card:state.foundations[f][i]}}
+    return null;
+  }
+  function render(){
+    $('#stock').innerHTML=''; $('#waste').innerHTML=''; $$('.foundation').forEach(x=>x.innerHTML=''); $$('.tableau').forEach(x=>{x.innerHTML='';x.classList.remove('empty')});
+    if(state.stock.length){ const el=cardEl(state.stock[state.stock.length-1]); el.classList.add('stock-card'); el.dataset.zone='stock'; $('#stock').appendChild(el); }
+    if(state.waste.length){ const c=state.waste[state.waste.length-1],el=cardEl(c); el.classList.add('waste-card'); el.dataset.zone='waste'; $('#waste').appendChild(el); }
+    state.foundations.forEach((pile,f)=>{if(pile.length){const c=pile[pile.length-1],el=cardEl(c);el.classList.add('foundation-card');el.dataset.zone='foundation';el.dataset.foundation=f;$(`.foundation[data-foundation="${f}"]`).appendChild(el)}});
+    state.tableau.forEach((pile,col)=>{
+      const host=$(`.tableau[data-col="${col}"]`); if(!pile.length) host.classList.add('empty');
+      let y=0; pile.forEach((c,i)=>{const el=cardEl(c);el.style.top=`${y}px`;el.style.zIndex=i+1;el.dataset.zone='tableau';el.dataset.col=col;el.dataset.index=i;if(selected&&selected.id===c.id)el.classList.add('selected');host.appendChild(el);y+=c.faceUp?parseInt(getComputedStyle(document.documentElement).getPropertyValue('--fan')):18;});
+    });
+    updateStatus();
+  }
+  function color(card){return RED.has(card.suit)?'red':'black'}
+  function canPlaceTableau(card,col){ const p=state.tableau[col]; if(!p.length)return card.rank===13; const t=p[p.length-1]; return t.faceUp && color(t)!==color(card) && t.rank===card.rank+1; }
+  function canPlaceFoundation(card,f){ const p=state.foundations[f]; return SUITS[f]===card.suit && ((!p.length&&card.rank===1)||(p.length&&p[p.length-1].rank+1===card.rank)); }
+  function moveFrom(loc){ if(loc.zone==='waste')return [state.waste.pop()]; if(loc.zone==='foundation')return [state.foundations[loc.foundation].pop()]; if(loc.zone==='tableau')return state.tableau[loc.col].splice(loc.index); return []; }
+  function revealTop(col){ const p=state.tableau[col]; if(p.length&&!p[p.length-1].faceUp){p[p.length-1].faceUp=true;state.score+=5;} }
+  function successfulMove(){state.moves++; beep(430,.035,.03); render(); checkWin(); if(settings.autoFinish) maybeAutoFinish();}
+  function attemptMove(loc,dest){
+    if(!loc||!loc.card?.faceUp)return false; const lead=loc.card;
+    if(dest.type==='tableau'){
+      if(loc.zone==='foundation' || loc.zone==='waste' || loc.zone==='tableau'){
+        if(!canPlaceTableau(lead,dest.col))return false; pushHistory(); const srcCol=loc.zone==='tableau'?loc.col:null; const moved=moveFrom(loc); state.tableau[dest.col].push(...moved); if(srcCol!==null)revealTop(srcCol); state.score+=loc.zone==='waste'?5:0; successfulMove(); return true;
+      }
+    }
+    if(dest.type==='foundation'){
+      if(loc.zone==='tableau' && loc.index!==state.tableau[loc.col].length-1)return false;
+      if((loc.zone==='waste'||loc.zone==='tableau')&&canPlaceFoundation(lead,dest.foundation)){
+        pushHistory(); const srcCol=loc.zone==='tableau'?loc.col:null; const moved=moveFrom(loc)[0]; state.foundations[dest.foundation].push(moved); if(srcCol!==null)revealTop(srcCol); state.score+=10; successfulMove(); return true;
+      }
+    }
+    return false;
+  }
+  function drawStock(){
+    if(state.stock.length){pushHistory();for(let i=0;i<settings.draw&&state.stock.length;i++){const c=state.stock.pop();c.faceUp=true;state.waste.push(c)}state.moves++;beep(320,.025,.02);render();return}
+    if(state.waste.length){pushHistory();state.stock=state.waste.reverse().map(c=>({...c,faceUp:false}));state.waste=[];state.moves++;render();}
+  }
+  function autoFoundation(loc){
+    if(!loc||!loc.card?.faceUp)return false; if(loc.zone==='tableau'&&loc.index!==state.tableau[loc.col].length-1)return false;
+    const f=SUITS.indexOf(loc.card.suit); return attemptMove(loc,{type:'foundation',foundation:f});
+  }
+  function undo(){if(!state.history.length){errorFeedback();return}const s=state.history.pop();restore(s);beep(240,.025,.015)}
+  function errorFeedback(){const w=$('#appWindow');w.classList.remove('shake');void w.offsetWidth;w.classList.add('shake');beep(120,.055,.025)}
+  function checkWin(){if(state.foundations.every(p=>p.length===13)){state.gameStatus='won';clearInterval(timer);winCascade();setTimeout(()=>showDialog('You won the game!','A perfect little stack of cards, somehow.',[['Play Again',()=>startNew()],['Close',closeDialog]]),2300)}}
+  function maybeAutoFinish(){ if(state.gameStatus!=='playing')return; const hidden=state.tableau.some(p=>p.some(c=>!c.faceUp)); if(hidden||state.stock.length||state.waste.length)return; let moved=true,guard=0; while(moved&&guard++<70){moved=false;for(let c=0;c<7;c++){const p=state.tableau[c];if(p.length){const loc={zone:'tableau',col:c,index:p.length-1,card:p[p.length-1]};const f=SUITS.indexOf(loc.card.suit);if(canPlaceFoundation(loc.card,f)){pushHistory();state.foundations[f].push(state.tableau[c].pop());state.score+=10;state.moves++;moved=true;}}}} render();checkWin(); }
+  function winCascade(){
+    const board=$('#board'); let count=0; const interval=setInterval(()=>{if(count>=36){clearInterval(interval);return}const f=count%4,p=state.foundations[f]; if(!p.length){count++;return} const c=p[Math.max(0,p.length-1-(count%13))],el=cardEl(c); el.classList.add('win-card'); const slot=$(`.foundation[data-foundation="${f}"]`),r=slot.getBoundingClientRect(),br=board.getBoundingClientRect(); let x=r.left-br.left,y=r.top-br.top; el.style.left=x+'px';el.style.top=y+'px';board.appendChild(el); const vx=(Math.random()*8-4),vy=-(Math.random()*6+3),spin=(Math.random()*24-12); let t=0; const anim=()=>{t+=.55;x+=vx*2.2;y+=(vy+t*.12)*2.2;el.style.transform=`translate(${x-(r.left-br.left)}px,${y-(r.top-br.top)}px) rotate(${spin*t}deg)`;if(y<br.height+180)requestAnimationFrame(anim);else el.remove()};requestAnimationFrame(anim);count++;},55)
+  }
+  function legalMoves(){
+    const moves=[]; if(state.waste.length){const c=state.waste.at(-1),loc={zone:'waste',index:state.waste.length-1,card:c};for(let col=0;col<7;col++)if(canPlaceTableau(c,col))moves.push([loc,{type:'tableau',col}]);const f=SUITS.indexOf(c.suit);if(canPlaceFoundation(c,f))moves.push([loc,{type:'foundation',foundation:f}]);}
+    for(let col=0;col<7;col++){const p=state.tableau[col];for(let i=0;i<p.length;i++){const c=p[i];if(!c.faceUp)continue;const loc={zone:'tableau',col,index:i,card:c};for(let d=0;d<7;d++)if(d!==col&&canPlaceTableau(c,d))moves.push([loc,{type:'tableau',col:d}]);if(i===p.length-1){const f=SUITS.indexOf(c.suit);if(canPlaceFoundation(c,f))moves.push([loc,{type:'foundation',foundation:f}]);}}
+    } return moves;
+  }
+  function hint(){const m=legalMoves()[0];if(!m){errorFeedback();return}const [loc,d]=m;const src=$(`[data-id="${loc.card.id}"]`);let dest=d.type==='tableau'?$(`.tableau[data-col="${d.col}"]`):$(`.foundation[data-foundation="${d.foundation}"]`);src?.classList.add('hint');dest?.classList.add('hint');setTimeout(()=>{src?.classList.remove('hint');dest?.classList.remove('hint')},1500)}
+  function beep(freq=440,dur=.04,gain=.02){if(!settings.sound)return;try{audioCtx ||= new (window.AudioContext||window.webkitAudioContext)();const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.frequency.value=freq;o.type='sine';g.gain.value=gain;o.connect(g);g.connect(audioCtx.destination);o.start();g.gain.exponentialRampToValueAtTime(.0001,audioCtx.currentTime+dur);o.stop(audioCtx.currentTime+dur)}catch(e){}}
+  function startNew(deck){state=freshState(deck||newDeck());seedState=clone(state);elapsedBefore=0;startTimer();selected=null;render();closeDialog()}
+  function restart(){if(!seedState)return;state=clone(seedState);state.history=[];elapsedBefore=0;startTimer();selected=null;render();closeDialog()}
+  function showDialog(title,html,buttons){$('#dialogTitle').textContent=title;$('#dialogBody').innerHTML=html;const a=$('#dialogActions');a.innerHTML='';buttons.forEach(([label,fn])=>{const b=document.createElement('button');b.className='vista-btn';b.textContent=label;b.onclick=fn;a.appendChild(b)});$('#modal').classList.add('show')}
+  function closeDialog(){ $('#modal').classList.remove('show'); }
+  function menuClose(){ $$('.dropdown').forEach(x=>x.classList.remove('open'));$$('.menu-btn').forEach(x=>x.classList.remove('active')); }
+  function toggleCheck(id,val){$(id).classList.toggle('on',val)}
+
+  document.addEventListener('click',e=>{
+    const mb=e.target.closest('.menu-btn'); if(mb){const menu=$('#'+mb.dataset.menu),was=menu.classList.contains('open');menuClose();if(!was){menu.classList.add('open');mb.classList.add('active')}return}
+    const mi=e.target.closest('.menu-item'); if(mi){const a=mi.dataset.action;menuClose();handleAction(a);return}
+    if(!e.target.closest('.menu-wrap'))menuClose();
+  });
+  function handleAction(a){
+    if(a==='new')showDialog('New Game','Start a new game?',[['New Game',()=>startNew()],['Cancel',closeDialog]]);
+    if(a==='restart')showDialog('Restart This Game','Restart the current deal from the beginning?',[['Restart',restart],['Cancel',closeDialog]]);
+    if(a==='undo')undo(); if(a==='hint')hint(); if(a==='exit')showDialog('Solitaire','This demo lives in your browser, so “Exit” just closes this dialog. Very 2007.',[['OK',closeDialog]]);
+    if(a==='draw1'){settings.draw=1;toggleCheck('#draw1Item',true);toggleCheck('#draw3Item',false)}
+    if(a==='draw3'){settings.draw=3;toggleCheck('#draw1Item',false);toggleCheck('#draw3Item',true)}
+    if(a==='auto'){settings.autoFinish=!settings.autoFinish;toggleCheck('#autoItem',settings.autoFinish)}
+    if(a==='sound'){settings.sound=!settings.sound;toggleCheck('#soundItem',settings.sound)}
+    if(a==='animations'){settings.animations=!settings.animations;toggleCheck('#animItem',settings.animations);document.body.classList.toggle('no-anim',!settings.animations)}
+    if(a==='how')showDialog('How to Play','Build the tableau downward in alternating colors. Move Aces to foundations, then build each suit upward to King. Empty tableau columns accept Kings. Double-click an exposed card to send it to a legal foundation.',[['OK',closeDialog]]);
+    if(a==='about')showDialog('About Solitaire','<div class="about">Klondike Solitaire on a very Windows 2000-ish desktop.</div>',[['OK',closeDialog]]);
+  }
+
+  // One click performs exactly one stock action: draw OR recycle, never both.
+  $('#stock').addEventListener('click',e=>{
+    if(e.target.closest('.card') || !state.stock.length) drawStock();
+  });
+
+  function locationFromElement(el){
+    if(!el)return null; const id=el.dataset.id;if(!id)return null;return findCard(id);
+  }
+  function chooseOrMove(loc){
+    if(!loc?.card?.faceUp)return; if(selected){
+      if(selected.id===loc.card.id){selected=null;render();return}
+      const targetLoc=loc; if(targetLoc.zone==='tableau'){if(attemptMove(findCard(selected.id),{type:'tableau',col:targetLoc.col})){selected=null;return}}
+    }
+    selected={id:loc.card.id};render();
+  }
+  $('#board').addEventListener('dblclick',e=>{const el=e.target.closest('.card');if(!el)return;const loc=locationFromElement(el);if(autoFoundation(loc)){selected=null}else errorFeedback()});
+  $('#board').addEventListener('click',e=>{
+    if(drag?.justDragged){drag.justDragged=false;return}
+    const f=e.target.closest('.foundation'); if(f&&selected){const ok=attemptMove(findCard(selected.id),{type:'foundation',foundation:+f.dataset.foundation});if(ok)selected=null;else errorFeedback();return}
+    const t=e.target.closest('.tableau'); const card=e.target.closest('.card'); if(t&&selected&&!card){const ok=attemptMove(findCard(selected.id),{type:'tableau',col:+t.dataset.col});if(ok)selected=null;else errorFeedback();return}
+    if(card && card.dataset.zone!=='stock') chooseOrMove(locationFromElement(card));
+  });
+
+  $('#board').addEventListener('pointerdown',e=>{
+    const el=e.target.closest('.card'); if(!el||el.dataset.zone==='stock')return; const loc=locationFromElement(el); if(!loc?.card?.faceUp)return;
+    if(loc.zone==='tableau'){
+      const stack=state.tableau[loc.col].slice(loc.index); if(stack.some((c,i)=>i&&!(stack[i-1].rank===c.rank+1&&color(stack[i-1])!==color(c))))return;
+    }
+    el.setPointerCapture?.(e.pointerId); const cards=loc.zone==='tableau'?state.tableau[loc.col].slice(loc.index):[loc.card]; const rect=el.getBoundingClientRect(); drag={pointerId:e.pointerId,startX:e.clientX,startY:e.clientY,dx:e.clientX-rect.left,dy:e.clientY-rect.top,loc,cards,active:false,justDragged:false};
+  });
+  function liftDragSource(){
+    if(!drag)return;
+    drag.sourceEls=drag.cards.map(c=>$(`[data-id="${c.id}"]`)).filter(Boolean);
+    drag.sourceEls.forEach(el=>el.classList.add('drag-origin'));
+  }
+  function clearDragVisuals(){
+    drag?.sourceEls?.forEach(el=>el.classList.remove('drag-origin'));
+    $('#dragLayer').innerHTML='';
+  }
+  $('#board').addEventListener('pointermove',e=>{
+    if(!drag||drag.pointerId!==e.pointerId)return;
+    if(!drag.active&&Math.hypot(e.clientX-drag.startX,e.clientY-drag.startY)>5){
+      drag.active=true;
+      liftDragSource();
+      $('#dragLayer').innerHTML='';
+      drag.cards.forEach((c,i)=>{
+        const ce=cardEl(c);
+        ce.classList.add('drag-card');
+        ce.style.left=(e.clientX-drag.dx)+'px';
+        ce.style.top=(e.clientY-drag.dy+i*parseInt(getComputedStyle(document.documentElement).getPropertyValue('--fan')))+'px';
+        ce.style.zIndex=9999+i;
+        $('#dragLayer').appendChild(ce);
+      });
+    }
+    if(drag.active){
+      [...$('#dragLayer').children].forEach((ce,i)=>{
+        ce.style.left=(e.clientX-drag.dx)+'px';
+        ce.style.top=(e.clientY-drag.dy+i*parseInt(getComputedStyle(document.documentElement).getPropertyValue('--fan')))+'px';
+      });
+    }
+  });
+  function pointInside(x,y,r,pad=0){
+    return x>=r.left-pad && x<=r.right+pad && y>=r.top-pad && y<=r.bottom+pad;
+  }
+  function dropDestinationAt(x,y){
+    // Foundations are compact targets, so test them first.
+    for(const f of $$('.foundation')){
+      if(pointInside(x,y,f.getBoundingClientRect(),5)) return {type:'foundation',foundation:+f.dataset.foundation};
+    }
+
+    // The tableau is visually much taller than one card. Use each column's full
+    // geometric lane so dropping on any visible card/stack position works.
+    const cols=$$('.tableau');
+    const row=$('#tableauRow').getBoundingClientRect();
+    if(y < row.top-8 || y > row.bottom+8) return null;
+    for(const t of cols){
+      const r=t.getBoundingClientRect();
+      if(x>=r.left-10 && x<=r.right+10) return {type:'tableau',col:+t.dataset.col};
+    }
+    return null;
+  }
+
+  $('#board').addEventListener('pointerup',e=>{
+    if(!drag||drag.pointerId!==e.pointerId)return;
+    if(drag.active){
+      drag.justDragged=true;
+      const dest=dropDestinationAt(e.clientX,e.clientY);
+      const source=findCard(drag.loc.card.id);
+      const ok=dest ? attemptMove(source,dest) : false;
+      if(!ok)errorFeedback();
+      clearDragVisuals();
+    }
+    const was=drag; setTimeout(()=>{if(drag===was)drag=null},0);
+  });
+  $('#board').addEventListener('pointercancel',e=>{
+    if(!drag||drag.pointerId!==e.pointerId)return;
+    clearDragVisuals();
+    drag=null;
+  });
+
+  document.addEventListener('keydown',e=>{
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();undo()}
+    else if(e.key.toLowerCase()==='n')showDialog('New Game','Start a new game?',[['New Game',()=>startNew()],['Cancel',closeDialog]]);
+    else if(e.key.toLowerCase()==='h')hint();
+    else if(e.key==='Escape')closeDialog();
+  });
+  window.addEventListener('resize',render);
+  startNew();
+})();
+</script>
+</body>
+</html>

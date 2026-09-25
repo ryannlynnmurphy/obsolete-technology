@@ -39,6 +39,7 @@
 <script type="module">
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+import { CSS3DRenderer, CSS3DObject } from "three/addons/renderers/CSS3DRenderer.js";
 import { FallingDevices } from "./FallingDevices.js";
 
 /* ============================================================
@@ -62,6 +63,17 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.1;
 document.body.appendChild(renderer.domElement);
+
+/* DOM overlay layer: hosts the solitaire game as a live page mapped
+   onto the CRT screen. Click-through everywhere except the game. */
+const cssRenderer = new CSS3DRenderer();
+cssRenderer.setSize(innerWidth, innerHeight);
+cssRenderer.domElement.style.position = "fixed";
+cssRenderer.domElement.style.top = "0";
+cssRenderer.domElement.style.left = "0";
+cssRenderer.domElement.style.pointerEvents = "none";
+cssRenderer.domElement.style.zIndex = "5";
+document.body.appendChild(cssRenderer.domElement);
 
 /* Soft studio illumination, no visible fixtures — union of the three original rigs */
 scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x0a0c10, 0.9));
@@ -135,8 +147,9 @@ function buildCRT(){
   add(new THREE.Mesh(new RoundedBoxGeometry(1.45,.85,1.25,6,.18),plastic),0,-2.55,-.1);
   add(new THREE.Mesh(new RoundedBoxGeometry(3.7,.42,2.6,8,.18),plastic),0,-3.08,.05);
 
-  const S = {power:true, bootT:0, ready:false, pdfOpen:false, pdfScroll:0, menuOpen:false};
+  const S = {power:true, bootT:0, ready:false, pdfOpen:false, pdfScroll:0, menuOpen:false, gameOpen:false};
   const FILE_HIT = {x:262,y:180,w:116,h:130};
+  const SOL_HIT = {x:496,y:180,w:120,h:130};
   const BEGIN_HIT = {x:4,y:446,w:90,h:30};
   const MENU = {x:4,y:356,w:172,h:90};
   function drawScreen(t){
@@ -174,6 +187,15 @@ function buildCRT(){
     g.fillStyle="#8f8f8a";g.fillRect(48,204,28,5);
     g.fillStyle="#fff";g.font="12px Tahoma,system-ui,sans-serif";
     g.fillText("trash",46,246);
+    /* solitaire icon: green felt + white card, opens the game */
+    g.fillStyle="#0d4f2a";g.fillRect(516,198,52,44);
+    g.strokeStyle="rgba(255,255,255,.5)";g.lineWidth=1;
+    g.strokeRect(516.5,198.5,51,43);
+    g.fillStyle="#f4f4f0";g.fillRect(528,204,28,32);
+    g.fillStyle="#a33d3d";g.font="bold 16px Georgia,serif";
+    g.fillText("A",534,228);
+    g.fillStyle="#fff";g.font="12px Tahoma,system-ui,sans-serif";
+    g.fillText("solitaire",508,258);
     if(S.pdfOpen){
       const px=170,py=44,pw=300,ph=392;
       /* window frame */
@@ -261,12 +283,15 @@ function buildCRT(){
       if(px>426&&px<470&&py>44&&py<88){S.pdfOpen=false;S.pdfScroll=0;}
       return;
     }
+    if(px>SOL_HIT.x&&px<SOL_HIT.x+SOL_HIT.w&&py>SOL_HIT.y&&py<SOL_HIT.y+SOL_HIT.h){
+      S.pdfOpen=false;S.pdfScroll=0;S.menuOpen=false;S.gameOpen=true;return;
+    }
     if(px>FILE_HIT.x&&px<FILE_HIT.x+FILE_HIT.w&&py>FILE_HIT.y&&py<FILE_HIT.y+FILE_HIT.h){
       S.pdfOpen=true;S.pdfScroll=0;
     }
   }
   function togglePower(){
-    S.power=!S.power; S.bootT=0; S.ready=false; S.pdfOpen=false; S.pdfScroll=0; S.menuOpen=false;
+    S.power=!S.power; S.bootT=0; S.ready=false; S.pdfOpen=false; S.pdfScroll=0; S.menuOpen=false; S.gameOpen=false;
     led.material=S.power?ledOn:ledOff;
     powerButton.position.z-= .06; setTimeout(()=>powerButton.position.z+=.06,120);
   }
@@ -841,6 +866,36 @@ scene.add(tvFlight);
 /* hidden until Rapier boots and spawns them — the void starts empty */
 crtFlight.visible = false; lapFlight.visible = false; tvFlight.visible = false;
 
+/* Solitaire overlay: the actual game page, mapped 1:1 onto the CRT
+   screen quad. Lives inside the monitor group so it rides the fall.
+   Hidden until the desktop icon opens it; the × in its corner closes. */
+const gameDiv = document.createElement("div");
+gameDiv.style.width = "640px";
+gameDiv.style.height = "480px";
+gameDiv.style.position = "relative";
+gameDiv.style.pointerEvents = "auto";
+gameDiv.style.overflow = "hidden";
+const gameFrame = document.createElement("iframe");
+gameFrame.src = "solitaire-win2000.html";
+gameFrame.style.width = "640px";
+gameFrame.style.height = "480px";
+gameFrame.style.border = "0";
+gameFrame.style.display = "block";
+gameDiv.appendChild(gameFrame);
+const gameClose = document.createElement("button");
+gameClose.textContent = "×";
+gameClose.setAttribute("aria-label", "close solitaire");
+gameClose.style.cssText = "position:absolute;top:6px;right:8px;width:26px;height:24px;" +
+  "border:1px solid #6f7f8c;border-radius:3px;cursor:pointer;" +
+  "background:linear-gradient(#ffffff,#d9e2ea);color:#111;font:14px/1 Tahoma,sans-serif;";
+gameClose.addEventListener("click", ()=>{ crt.S.gameOpen = false; });
+gameDiv.appendChild(gameClose);
+const gameObj = new CSS3DObject(gameDiv);
+gameObj.scale.set(3.5/640, 2.45/480, 1);
+gameObj.position.set(-0.18, 0.25, 1.826);
+gameObj.visible = false;
+crt.group.add(gameObj);
+
 /* Collider quats in flight space (account for inner offsets:
    laptop base yaw -18°, lid = yaw(-18°) * tilt(-12°)). */
 const _ce = new THREE.Euler(), _cq = new THREE.Quaternion();
@@ -1123,7 +1178,12 @@ function animate(){
     tvd.screenMat.emissiveIntensity = 1.2 + Math.sin(performance.now()*0.016)*0.035;
   }
 
+  /* solitaire overlay follows the desktop flag */
+  gameObj.visible = crt.S.gameOpen;
+  crt.display.visible = !crt.S.gameOpen;
+
   renderer.render(scene, camera);
+  cssRenderer.render(scene, camera);
 }
 animate();
 
@@ -1131,6 +1191,7 @@ addEventListener("resize", ()=>{
   camera.aspect = innerWidth/innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
+  cssRenderer.setSize(innerWidth, innerHeight);
   if(focused){
     const m = focused==="crt" ? crt.display :
               focused==="laptop" ? lap.display : tvd.innerScreen;

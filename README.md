@@ -7,6 +7,8 @@ step inside and use it. ESC steps back out.
 - `index.html` — the three devices, their working screens, staging, camera.
 - `FallingDevices.js` — the Rapier physics controller (staged slow-fall,
   screen-focus freeze, invisible top/bottom wrap).
+- `solitaire-win2000.html` — a complete Klondike game that runs live on
+  the CRT: click its desktop icon to open, × to close.
 
 Run it with any static server (ES modules + CDN imports require http):
 
