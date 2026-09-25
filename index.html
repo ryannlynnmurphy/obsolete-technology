@@ -1,0 +1,1055 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Obsolete Technology — Frozen Fall</title>
+<link rel="icon" href="data:," />
+<style>
+  html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#060708;
+    font-family:system-ui,sans-serif}
+  canvas{display:block}
+  #hud{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);
+    font:11px/1.5 Arial,sans-serif;letter-spacing:.14em;text-transform:uppercase;
+    color:rgba(255,255,255,.42);pointer-events:none;user-select:none;text-align:center;
+    white-space:nowrap;z-index:10;transition:opacity .6s}
+  #hud.gone{opacity:0}
+  #exitBtn{position:fixed;left:50%;bottom:52px;transform:translateX(-50%);
+    display:none;z-index:11;background:#e8edf3;color:#0b0e13;border:0;border-radius:999px;
+    padding:10px 20px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+  #exitBtn.show{display:block}
+  #title{position:fixed;top:22px;left:50%;transform:translateX(-50%);
+    font:11px/1.4 Arial,sans-serif;letter-spacing:.35em;text-transform:uppercase;
+    color:rgba(255,255,255,.30);pointer-events:none;user-select:none;z-index:10;
+    transition:opacity 1s}
+</style>
+<script type="importmap">
+{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
+  "@dimforge/rapier3d-compat":"https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.14.0/rapier.es.js"
+}}
+</script>
+</head>
+<body>
+<div id="title">obsolete technology</div>
+<div id="hud">click a screen to step inside &middot; esc exits</div>
+<button id="exitBtn">exit screen &middot; esc</button>
+
+<script type="module">
+import * as THREE from "three";
+import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+import { FallingDevices } from "./FallingDevices.js";
+
+/* ============================================================
+   SHARED VOID STAGE
+   ============================================================ */
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x060708);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, .1, 200);
+const OVERVIEW_POS = new THREE.Vector3(0, 2, 27);
+const OVERVIEW_TGT = new THREE.Vector3(0, 2, 0);
+camera.position.copy(OVERVIEW_POS);
+camera.lookAt(OVERVIEW_TGT);
+
+const renderer = new THREE.WebGLRenderer({antialias:true, powerPreference:"high-performance"});
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+document.body.appendChild(renderer.domElement);
+
+/* Soft studio illumination, no visible fixtures — union of the three original rigs */
+scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x0a0c10, 0.9));
+const keyLight = new THREE.DirectionalLight(0xffffff, 2.3);
+keyLight.position.set(4, 7, 5);
+keyLight.castShadow = true;
+/* wide shadow frustum — the pile is tall */
+keyLight.shadow.camera.left = -12; keyLight.shadow.camera.right = 12;
+keyLight.shadow.camera.top = 12; keyLight.shadow.camera.bottom = -12;
+keyLight.shadow.camera.near = 0.5; keyLight.shadow.camera.far = 40;
+keyLight.shadow.mapSize.set(2048, 2048);
+keyLight.shadow.bias = -0.0005;
+scene.add(keyLight);
+const rimLight = new THREE.DirectionalLight(0x9db8ff, 2.3);
+rimLight.position.set(-5, 3.5, -6);
+scene.add(rimLight);
+const warm = new THREE.PointLight(0xffb477, 10, 14);
+warm.position.set(5, 0.5, 4);
+scene.add(warm);
+const underFill = new THREE.DirectionalLight(0x3a4356, 0.6);
+underFill.position.set(0, -4, 2);
+scene.add(underFill);
+
+/* Reused temps — never allocate inside the loop */
+const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
+const _v4 = new THREE.Vector3();
+const _ray = new THREE.Raycaster(), _ptr = new THREE.Vector2();
+
+/* ============================================================
+   DEVICE 1 — CRT MONITOR (geometry / materials / OS preserved)
+   ============================================================ */
+function buildCRT(){
+  const group = new THREE.Group();
+  const plastic = new THREE.MeshStandardMaterial({color:0xb7aa89,roughness:.72});
+  const plasticShadow = new THREE.MeshStandardMaterial({color:0x867c64,roughness:.8});
+  const darkPlastic = new THREE.MeshStandardMaterial({color:0x35342f,roughness:.8});
+  const black = new THREE.MeshStandardMaterial({color:0x080909,roughness:.6});
+  const ledOn = new THREE.MeshStandardMaterial({color:0x9fc987,emissive:0x76ff5c,emissiveIntensity:4});
+  const ledOff = new THREE.MeshStandardMaterial({color:0x331111,emissive:0x220000,emissiveIntensity:1});
+  function add(mesh,x=0,y=0,z=0){mesh.position.set(x,y,z);
+    mesh.castShadow=true;mesh.receiveShadow=true;group.add(mesh);return mesh;}
+
+  add(new THREE.Mesh(new RoundedBoxGeometry(5.6,4.4,2.7,8,.28),plastic));
+  const back = add(new THREE.Mesh(new RoundedBoxGeometry(4.7,3.65,3.3,8,.42),plastic),0,.1,-1.35);
+  back.scale.set(.9,.9,1);
+  add(new THREE.Mesh(new RoundedBoxGeometry(3.55,2.65,.4,6,.24),plasticShadow),0,.15,-3.05);
+  add(new THREE.Mesh(new RoundedBoxGeometry(5.25,4.05,.32,8,.26),plastic),0,0,1.46);
+  add(new THREE.Mesh(new RoundedBoxGeometry(4.35,3.05,.3,8,.28),darkPlastic),-0.18,.25,1.65);
+
+  const scrCanvas = document.createElement("canvas"); scrCanvas.width=640; scrCanvas.height=480;
+  const g = scrCanvas.getContext("2d");
+  const scrTex = new THREE.CanvasTexture(scrCanvas);
+  scrTex.colorSpace = THREE.SRGBColorSpace;
+  const display = new THREE.Mesh(new THREE.PlaneGeometry(3.5,2.45),
+    new THREE.MeshBasicMaterial({map:scrTex,toneMapped:false}));
+  display.position.set(-0.18,.25,1.82); group.add(display);
+
+  add(new THREE.Mesh(new RoundedBoxGeometry(4.2,.47,.19,6,.07),plasticShadow),.15,-1.65,1.65);
+  const powerButton = add(new THREE.Mesh(new RoundedBoxGeometry(.48,.3,.22,4,.045),darkPlastic),1.75,-1.65,1.81);
+  const led = new THREE.Mesh(new THREE.SphereGeometry(.065,20,20),ledOn);
+  led.position.set(1.35,-1.65,1.81); group.add(led);
+
+  for(const s of [-1,1]) for(let i=0;i<9;i++){
+    const v=new THREE.Mesh(new THREE.BoxGeometry(.035,.09,1.35),black);
+    v.position.set(s*2.81,1.15-i*.22,-.35); group.add(v);
+  }
+  for(let i=0;i<12;i++){
+    const v=new THREE.Mesh(new THREE.BoxGeometry(.12,.025,1.1),black);
+    v.position.set(-1.3+i*.24,2.215,-.6); group.add(v);
+  }
+  add(new THREE.Mesh(new RoundedBoxGeometry(1.45,.85,1.25,6,.18),plastic),0,-2.55,-.1);
+  add(new THREE.Mesh(new RoundedBoxGeometry(3.7,.42,2.6,8,.18),plastic),0,-3.08,.05);
+
+  const S = {power:true, bootT:0, ready:false, pdfOpen:false, pdfScroll:0};
+  const FILE_HIT = {x:262,y:180,w:116,h:130};
+  function drawScreen(t){
+    const W=640,H=480;
+    g.fillStyle="#0b0b0c";g.fillRect(0,0,W,H);
+    if(!S.power){scrTex.needsUpdate=true;return;}
+    if(!S.ready){
+      g.fillStyle="rgba(232,230,225,.28)";
+      g.fillRect(W/2-2,H/2-2,4,4);
+      scrTex.needsUpdate=true;return;
+    }
+    g.textBaseline="alphabetic";
+    if(S.pdfOpen){
+      g.fillStyle="#e8e6e1";g.font="20px system-ui,sans-serif";
+      g.fillText("ryann lynn murphy",40,52);
+      const px=170,py=44,pw=300,ph=392;
+      g.fillStyle="#f2efe7";g.fillRect(px,py,pw,ph);
+      g.save();g.beginPath();g.rect(px,py,pw,ph);g.clip();
+      g.translate(0,-S.pdfScroll);
+      g.fillStyle="#1a1a1c";g.font="600 24px Georgia,serif";
+      g.fillText("rx",px+32,py+60);
+      g.fillStyle="#c9c5bb";g.fillRect(px+32,py+76,pw-64,1);
+      g.fillStyle="#55555a";g.font="15px Georgia,serif";
+      g.fillText("This file is intentionally quiet.",px+32,py+120);
+      g.fillText("There is nothing else",px+32,py+146);
+      g.fillText("on this computer.",px+32,py+172);
+      g.fillStyle="#c4c0b5";
+      for(let i=0;i<4;i++)g.fillRect(px+32,py+200+i*24,pw-64-((i*53)%120),8);
+      g.fillStyle="#55555a";g.font="13px system-ui,sans-serif";
+      g.fillText("— end of file —",px+32,py+330);
+      g.restore();
+      g.fillStyle="#8f8f96";g.font="20px system-ui,sans-serif";
+      g.fillText("×",px+pw-28,py+32);
+      scrTex.needsUpdate=true;return;
+    }
+    g.fillStyle="#e8e6e1";g.font="20px system-ui,sans-serif";
+    g.fillText("ryann lynn murphy",40,52);
+    const fx=296,fy=206;
+    g.strokeStyle="rgba(232,230,225,.8)";g.lineWidth=1.5;
+    g.beginPath();
+    g.moveTo(fx,fy);g.lineTo(fx+32,fy);g.lineTo(fx+48,fy+16);g.lineTo(fx+48,fy+60);
+    g.lineTo(fx,fy+60);g.closePath();g.stroke();
+    g.beginPath();g.moveTo(fx+32,fy);g.lineTo(fx+32,fy+16);g.lineTo(fx+48,fy+16);g.stroke();
+    g.fillStyle="#8f8f96";g.font="14px system-ui,sans-serif";
+    g.fillText("rx.pdf",fx-1,fy+84);
+    if(Math.floor(t*1.4)%2===0){g.fillStyle="#e8e6e1";g.fillRect(40,H-52,9,17);}
+    scrTex.needsUpdate=true;
+  }
+  function clickOS(px,py){
+    if(!S.ready||!S.power) return;
+    if(S.pdfOpen){
+      if(px>426&&px<470&&py>44&&py<88){S.pdfOpen=false;S.pdfScroll=0;}
+      return;
+    }
+    if(px>FILE_HIT.x&&px<FILE_HIT.x+FILE_HIT.w&&py>FILE_HIT.y&&py<FILE_HIT.y+FILE_HIT.h){
+      S.pdfOpen=true;S.pdfScroll=0;
+    }
+  }
+  function togglePower(){
+    S.power=!S.power; S.bootT=0; S.ready=false; S.pdfOpen=false; S.pdfScroll=0;
+    led.material=S.power?ledOn:ledOff;
+    powerButton.position.z-= .06; setTimeout(()=>powerButton.position.z+=.06,120);
+  }
+  return {group, display, powerButton, S, drawScreen, clickOS, togglePower,
+    screenW:3.5, screenH:2.45};
+}
+
+/* ============================================================
+   DEVICE 2 — LAPTOP (geometry / keyboard / Ryann OS preserved)
+   ============================================================ */
+function buildLaptop(){
+  const laptop = new THREE.Group();
+  const LAPTOP_BASE_ROT = THREE.MathUtils.degToRad(-18);
+  laptop.rotation.y = LAPTOP_BASE_ROT;
+
+  const aluminum = new THREE.MeshStandardMaterial({color:0xb8babd,metalness:.8,roughness:.28});
+  const darkAlu = new THREE.MeshStandardMaterial({color:0x303236,metalness:.7,roughness:.32});
+  const blackMat = new THREE.MeshStandardMaterial({color:0x090909,roughness:.32,metalness:.15});
+  const keyMatBase = new THREE.MeshStandardMaterial({color:0x191919,roughness:.55});
+
+  const OS_W=1024, OS_H=560;
+  const osCanvas=document.createElement("canvas");
+  osCanvas.width=OS_W; osCanvas.height=OS_H;
+  const ctx=osCanvas.getContext("2d");
+  const osTex=new THREE.CanvasTexture(osCanvas);
+  osTex.colorSpace=THREE.SRGBColorSpace;
+  osTex.anisotropy=8;
+
+  const ICON={x:70,y:70,w:100,h:122};
+  let WIN={x:142,y:48,w:740,h:464};
+  const TITLE_H=40;
+  let selected=false, windowOpen=false;
+  let cursor={x:512,y:300}, cursorActive=false;
+  let pdfScroll=0, typedBuffer="", typedUntil=0;
+  let lastVirtualClick=0;
+
+  function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+
+  function drawOS(){
+    const now=performance.now();
+    const g=ctx.createLinearGradient(0,0,0,OS_H);
+    g.addColorStop(0,"#24365c");g.addColorStop(1,"#0a0f1e");
+    ctx.fillStyle=g;ctx.fillRect(0,0,OS_W,OS_H);
+    ctx.fillStyle="rgba(255,255,255,.92)";ctx.fillRect(0,0,OS_W,32);
+    ctx.fillStyle="#111";ctx.font="14px system-ui";ctx.textBaseline="middle";
+    ctx.fillText("Ryann OS",14,17);
+    ctx.textAlign="right";
+    ctx.fillText(new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})+"   100%",OS_W-14,17);
+    ctx.textAlign="left";
+    const ix=ICON.x,iy=ICON.y;
+    if(selected){ctx.fillStyle="rgba(80,160,255,.45)";rr(ix-10,iy-8,ICON.w+20,ICON.h+22,12);ctx.fill();}
+    ctx.fillStyle="#fff";ctx.strokeStyle="rgba(0,0,0,.25)";
+    ctx.beginPath();ctx.moveTo(ix+10,iy);ctx.lineTo(ix+70,iy);ctx.lineTo(ix+86,iy+16);
+    ctx.lineTo(ix+86,iy+84);ctx.lineTo(ix+10,iy+84);ctx.closePath();ctx.fill();ctx.stroke();
+    ctx.fillStyle="#e11d48";ctx.fillRect(ix+10,iy+52,76,22);
+    ctx.fillStyle="#fff";ctx.font="bold 13px system-ui";ctx.fillText("PDF",ix+32,iy+64);
+    ctx.fillStyle="#fff";ctx.font="13px system-ui";ctx.textAlign="center";
+    ctx.fillText("rx.pdf",ix+48,iy+102);ctx.textAlign="left";
+    if(typedBuffer && now<typedUntil){
+      ctx.fillStyle="rgba(0,0,0,.65)";rr(OS_W/2-180,OS_H-52,360,34,17);ctx.fill();
+      ctx.fillStyle="#fff";ctx.font="15px ui-monospace,monospace";ctx.textAlign="center";
+      ctx.fillText("> "+typedBuffer.slice(-28),OS_W/2,OS_H-34);ctx.textAlign="left";
+    }
+    if(windowOpen){
+      ctx.save();ctx.shadowColor="rgba(0,0,0,.4)";ctx.shadowBlur=30;ctx.shadowOffsetY=10;
+      ctx.fillStyle="#fff";rr(WIN.x,WIN.y,WIN.w,WIN.h,12);ctx.fill();ctx.restore();
+      ctx.save();rr(WIN.x,WIN.y,WIN.w,WIN.h,12);ctx.clip();
+      ctx.fillStyle="#f1f1f3";ctx.fillRect(WIN.x,WIN.y,WIN.w,TITLE_H);
+      ctx.fillStyle="#ff5f57";ctx.beginPath();ctx.arc(WIN.x+26,WIN.y+20,10,0,7);ctx.fill();
+      ctx.fillStyle="#7a0000";ctx.font="bold 12px system-ui";ctx.textAlign="center";
+      ctx.fillText("x",WIN.x+26,WIN.y+21);ctx.textAlign="left";
+      ctx.fillStyle="#888";ctx.beginPath();ctx.arc(WIN.x+48,WIN.y+20,8,0,7);ctx.fill();
+      ctx.beginPath();ctx.arc(WIN.x+66,WIN.y+20,8,0,7);ctx.fill();
+      ctx.fillStyle="#222";ctx.font="14px system-ui";ctx.textAlign="center";
+      ctx.fillText("rx.pdf",WIN.x+WIN.w/2,WIN.y+21);ctx.textAlign="left";
+      const cy=WIN.y+TITLE_H;
+      ctx.fillStyle="#e9e9ec";ctx.fillRect(WIN.x,cy,WIN.w,WIN.h-TITLE_H);
+      ctx.save();ctx.beginPath();ctx.rect(WIN.x,cy,WIN.w,WIN.h-TITLE_H);ctx.clip();
+      ctx.translate(0,-pdfScroll);
+      const px=WIN.x+70, pw=WIN.w-140;
+      for(let p=0;p<2;p++){
+        const py=cy+24+p*330;
+        ctx.fillStyle="#fff";ctx.fillRect(px,py,pw,300);
+        ctx.strokeStyle="#ccc";ctx.strokeRect(px,py,pw,300);
+        ctx.fillStyle="#111";ctx.font="bold 28px Georgia";ctx.textAlign="center";
+        ctx.fillText(p===0?"rx":"( continued )",WIN.x+WIN.w/2,py+62);ctx.textAlign="left";
+        ctx.fillStyle="#555";ctx.font="14px Georgia";
+        if(p===0){
+          ctx.fillText("This file is intentionally quiet.",px+40,py+110);
+          ctx.fillText("There is nothing else on this computer.",px+40,py+136);
+          ctx.fillStyle="#bbb";for(let i=0;i<4;i++)ctx.fillRect(px+40,py+165+i*22,pw-80-(i*40),10);
+        }else{
+          ctx.fillStyle="#bbb";for(let i=0;i<6;i++)ctx.fillRect(px+40,py+50+i*22,pw-80-(i*30),10);
+          ctx.fillStyle="#555";ctx.font="13px system-ui";ctx.fillText("— end of file —",px+40,py+230);
+        }
+      }
+      ctx.restore();ctx.restore();
+    }
+    if(cursorActive){
+      ctx.fillStyle="#fff";ctx.strokeStyle="#000";ctx.lineWidth=2;
+      ctx.beginPath();ctx.moveTo(cursor.x,cursor.y);ctx.lineTo(cursor.x,cursor.y+20);
+      ctx.lineTo(cursor.x+6,cursor.y+15);ctx.lineTo(cursor.x+9,cursor.y+21);
+      ctx.lineTo(cursor.x+12,cursor.y+19);ctx.lineTo(cursor.x+9,cursor.y+13);
+      ctx.lineTo(cursor.x+15,cursor.y+13);ctx.closePath();ctx.fill();ctx.stroke();
+    }
+    osTex.needsUpdate=true;
+  }
+
+  const inIcon=(x,y)=>x>ICON.x-12&&x<ICON.x+ICON.w+12&&y>ICON.y-10&&y<ICON.y+ICON.h+14;
+  const inClose=(x,y)=>Math.hypot(x-(WIN.x+26),y-(WIN.y+20))<14;
+  const inTitle=(x,y)=>x>WIN.x&&x<WIN.x+WIN.w&&y>WIN.y&&y<WIN.y+TITLE_H;
+  let winDragging=false, winGrabDX=0, winGrabDY=0;
+  function handleVirtualClick(cx,cy){
+    if(windowOpen){
+      if(inClose(cx,cy)){windowOpen=false;winDragging=false;}
+      return;
+    }
+    if(inIcon(cx,cy)){
+      const now=performance.now();
+      if(now-lastVirtualClick<380){windowOpen=true;selected=true;pdfScroll=0;}
+      else selected=true;
+      lastVirtualClick=now;
+    }else selected=false;
+  }
+  function typeKey(ch){
+    if(ch==='back'){typedBuffer=typedBuffer.slice(0,-1);typedUntil=performance.now()+2000;return;}
+    if(typeof ch==='string'&&ch.length===1){typedBuffer=(typedBuffer+ch).slice(-40);typedUntil=performance.now()+2000;}
+  }
+
+  /* ---- laptop hardware ---- */
+  const base=new THREE.Mesh(new THREE.BoxGeometry(6.4,.22,4.2),aluminum);
+  base.position.y=.2;laptop.add(base);
+  const lower=new THREE.Mesh(new THREE.BoxGeometry(6.28,.07,4.08),darkAlu);
+  lower.position.y=.075;laptop.add(lower);
+  const bed=new THREE.Mesh(new THREE.BoxGeometry(5.45,.025,2.15),blackMat);
+  bed.position.set(0,.325,-.60);laptop.add(bed);
+
+  const K=(label,width,code,opts={})=>({label,width,code,sub:opts.sub,type:opts.type||(label.length===1?'char':'modifier')});
+  const keyboardLayout=[
+   [K('esc',1,'Escape'),K('F1',1,'F1'),K('F2',1,'F2'),K('F3',1,'F3'),K('F4',1,'F4'),K('F5',1,'F5'),K('F6',1,'F6'),K('F7',1,'F7'),K('F8',1,'F8'),K('F9',1,'F9'),K('F10',1,'F10'),K('F11',1,'F11'),K('F12',1,'F12'),K('del',2,'Delete')],
+   [K('`',1,'Backquote',{sub:'~'}),K('1',1,'Digit1',{sub:'!'}),K('2',1,'Digit2',{sub:'@'}),K('3',1,'Digit3',{sub:'#'}),K('4',1,'Digit4',{sub:'$'}),K('5',1,'Digit5',{sub:'%'}),K('6',1,'Digit6',{sub:'^'}),K('7',1,'Digit7',{sub:'&'}),K('8',1,'Digit8',{sub:'*'}),K('9',1,'Digit9',{sub:'('}),K('0',1,'Digit0',{sub:')'}),K('-',1,'Minus',{sub:'_'}),K('=',1,'Equal',{sub:'+'}),K('backspace',2,'Backspace')],
+   [K('tab',1.5,'Tab'),K('Q',1,'KeyQ'),K('W',1,'KeyW'),K('E',1,'KeyE'),K('R',1,'KeyR'),K('T',1,'KeyT'),K('Y',1,'KeyY'),K('U',1,'KeyU'),K('I',1,'KeyI'),K('O',1,'KeyO'),K('P',1,'KeyP'),K('[',1,'BracketLeft',{sub:'{'}),K(']',1,'BracketRight',{sub:'}'}),K('\\',1.5,'Backslash',{sub:'|'})],
+   [K('caps',1.75,'CapsLock'),K('A',1,'KeyA'),K('S',1,'KeyS'),K('D',1,'KeyD'),K('F',1,'KeyF'),K('G',1,'KeyG'),K('H',1,'KeyH'),K('J',1,'KeyJ'),K('K',1,'KeyK'),K('L',1,'KeyL'),K(';',1,'Semicolon',{sub:':'}),K("'",1,'Quote',{sub:'"'}),K('enter',2.25,'Enter')],
+   [K('shift',2.25,'ShiftLeft'),K('Z',1,'KeyZ'),K('X',1,'KeyX'),K('C',1,'KeyC'),K('V',1,'KeyV'),K('B',1,'KeyB'),K('N',1,'KeyN'),K('M',1,'KeyM'),K(',',1,'Comma',{sub:'<'}),K('.',1,'Period',{sub:'>'}),K('/',1,'Slash',{sub:'?'}),K('shift',2.75,'ShiftRight')],
+   [K('ctrl',1.25,'ControlLeft'),K('fn',1,'Fn'),K('alt',1.25,'AltLeft'),K('cmd',1.25,'MetaLeft'),K('space',6,'Space',{type:'space'}),K('alt',1.25,'AltRight'),K('←',1,'ArrowLeft',{type:'arrow'}),{width:1,stack:[K('↑',1,'ArrowUp',{type:'arrow'}),K('↓',1,'ArrowDown',{type:'arrow'})]},K('→',1,'ArrowRight',{type:'arrow'})]
+  ];
+  const KB_W=5.0, KB_UNITS=15, KB_PITCH=KB_W/KB_UNITS;
+  const KB_GX=.045, KB_GZ=.05, KB_D=.27, KB_H=.05, KB_CZ=-.60, KB_Y=.35, KB_TRAVEL=.018;
+  const KB_ROWS=keyboardLayout.length, KB_DEPTH=KB_ROWS*KB_D+(KB_ROWS-1)*KB_GZ;
+  const keyMeshes=[], keyByCode={};
+  const keyGeoCache=new Map(), legendTexCache=new Map();
+  const legendPlaneGeo=new THREE.PlaneGeometry(1,1);
+  function kbGeometry(w,d){
+    const k=w.toFixed(3)+'|'+d.toFixed(3);
+    let gr=keyGeoCache.get(k);
+    if(!gr){gr=new RoundedBoxGeometry(w,KB_H,d,2,.015);keyGeoCache.set(k,gr);}
+    return gr;
+  }
+  function kbLegendMaterial(def,half){
+    if(def.type==='space')return null;
+    const bucket=half?'half':def.width>=2?'wide':'narrow';
+    const cacheKey=def.label+'|'+(def.sub||'')+'|'+bucket;
+    let tex=legendTexCache.get(cacheKey);
+    if(!tex){
+      const cw=bucket==='wide'?256:128, ch=half?48:96;
+      const cv=document.createElement('canvas');cv.width=cw;cv.height=ch;
+      const c2=cv.getContext('2d');
+      c2.clearRect(0,0,cw,ch);
+      c2.textAlign='center';c2.textBaseline='middle';
+      if(def.sub){
+        c2.fillStyle='#9aa0a6';c2.font='400 20px system-ui,sans-serif';
+        c2.fillText(def.sub,cw/2,ch*0.26);
+        c2.fillStyle='#e8eaed';c2.font='600 38px system-ui,sans-serif';
+        c2.fillText(def.label,cw/2,ch*0.64);
+      }else if(def.label.length===1){
+        c2.fillStyle='#e8eaed';c2.font='600 40px system-ui,sans-serif';
+        c2.fillText(def.label,cw/2,ch/2+1);
+      }else{
+        c2.fillStyle='#cfd3d8';c2.font='600 24px system-ui,sans-serif';
+        c2.fillText(def.label,cw/2,ch/2+1);
+      }
+      tex=new THREE.CanvasTexture(cv);
+      tex.colorSpace=THREE.SRGBColorSpace;tex.anisotropy=4;
+      legendTexCache.set(cacheKey,tex);
+    }
+    return new THREE.MeshBasicMaterial({map:tex,transparent:true,toneMapped:false,depthWrite:false});
+  }
+  function kbMakeKey(def,w,d,cx,cz,half){
+    const m=new THREE.Mesh(kbGeometry(w,d),keyMatBase);
+    m.position.set(cx,KB_Y,cz);
+    m.userData={type:'keyboardKey',label:def.label,code:def.code,def,baseY:KB_Y,pressedUntil:0,held:false};
+    const lm=kbLegendMaterial(def,half);
+    if(lm){
+      const leg=new THREE.Mesh(legendPlaneGeo,lm);
+      leg.rotation.x=-Math.PI/2;
+      leg.scale.set(w*(half?0.66:0.78),d*(half?0.6:0.62),1);
+      leg.position.y=KB_H/2+.0012;
+      leg.renderOrder=2;
+      leg.raycast=()=>{};
+      m.add(leg);
+    }
+    laptop.add(m);keyMeshes.push(m);keyByCode[def.code]=m;
+    return m;
+  }
+  keyboardLayout.forEach((row,r)=>{
+    let x=-KB_W/2;
+    const z=KB_CZ-KB_DEPTH/2+KB_D/2+r*(KB_D+KB_GZ);
+    row.forEach(def=>{
+      if(def.stack){
+        const hw=def.width*KB_PITCH-KB_GX, hd=(KB_D-KB_GZ)/2;
+        def.stack.forEach((s,i)=>{
+          kbMakeKey(s,hw,hd,x+def.width*KB_PITCH/2,z-KB_D/2+hd/2+i*(hd+KB_GZ),true);
+        });
+      }else{
+        kbMakeKey(def,def.width*KB_PITCH-KB_GX,KB_D,x+def.width*KB_PITCH/2,z,false);
+      }
+      x+=def.width*KB_PITCH;
+    });
+  });
+  function flashKey(code,ms=140){
+    const m=keyByCode[code];if(!m)return;
+    m.userData.pressedUntil=performance.now()+ms;
+  }
+
+  const trackpad=new THREE.Mesh(new THREE.BoxGeometry(2.5,.018,1.0),
+    new THREE.MeshStandardMaterial({color:0xa7a9ac,metalness:.75,roughness:.38}));
+  trackpad.position.set(0,.325,1.28);laptop.add(trackpad);
+
+  const OPEN_A=THREE.MathUtils.degToRad(-12);
+  const pivot=new THREE.Group();pivot.position.set(0,.28,-2.02);laptop.add(pivot);
+  pivot.rotation.x=OPEN_A;
+  const lidBody=new THREE.Mesh(new THREE.BoxGeometry(6.35,3.75,.16),aluminum);
+  lidBody.position.set(0,1.88,0);pivot.add(lidBody);
+  const bezel=new THREE.Mesh(new THREE.BoxGeometry(6.13,3.52,.04),blackMat);
+  bezel.position.set(0,1.88,.101);pivot.add(bezel);
+  const display=new THREE.Mesh(new THREE.PlaneGeometry(5.75,3.15),
+    new THREE.MeshBasicMaterial({map:osTex,toneMapped:false}));
+  display.position.set(0,1.88,.124);pivot.add(display);
+  const lens=new THREE.Mesh(new THREE.SphereGeometry(.035,16,16),
+    new THREE.MeshStandardMaterial({color:0x101820,roughness:.1}));
+  lens.position.set(0,3.57,.13);pivot.add(lens);
+  const lip=new THREE.Mesh(new THREE.BoxGeometry(1.1,.035,.07),darkAlu);
+  lip.position.set(0,.13,2.105);laptop.add(lip);
+
+  function updateKeys(){
+    const now=performance.now();
+    for(let i=0;i<keyMeshes.length;i++){
+      const m=keyMeshes[i];
+      const down=m.userData.held||now<m.userData.pressedUntil;
+      const target=down?m.userData.baseY-KB_TRAVEL:m.userData.baseY;
+      m.position.y+=(target-m.position.y)*.4;
+    }
+  }
+  return {group:laptop, display, OS_W, OS_H, drawOS, updateKeys, flashKey,
+    handleVirtualClick, typeKey, keyByCode, inClose, inTitle,
+    screenW:5.75, screenH:3.15,
+    get cursor(){return cursor;}, set cursor(c){cursor=c;},
+    get cursorActive(){return cursorActive;}, set cursorActive(v){cursorActive=v;},
+    get windowOpen(){return windowOpen;},
+    get winDragging(){return winDragging;}, set winDragging(v){winDragging=v;},
+    get WIN(){return WIN;}, setWIN(x,y){WIN.x=x;WIN.y=y;},
+    get winGrab(){return {dx:winGrabDX,dy:winGrabDY};},
+    setWinGrab(dx,dy){winGrabDX=dx;winGrabDY=dy;},
+    scrollPdf(d){pdfScroll=THREE.MathUtils.clamp(pdfScroll+d,0,220);}};
+}
+
+/* ============================================================
+   DEVICE 3 — VINTAGE TV (geometry / materials / static preserved)
+   ============================================================ */
+function buildTV(){
+  const tv = new THREE.Group();
+  function makeWoodTexture() {
+    const c = document.createElement('canvas'); c.width = 512; c.height = 512;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#5d2d16'; ctx.fillRect(0,0,c.width,c.height);
+    for (let i=0;i<150;i++){
+      const y = Math.random()*c.height, amp = 2+Math.random()*7, alpha = 0.03+Math.random()*0.09;
+      ctx.strokeStyle = `rgba(255,190,110,${alpha})`; ctx.lineWidth = 1+Math.random()*2;
+      ctx.beginPath(); ctx.moveTo(0,y);
+      for(let x=0;x<=c.width;x+=16) ctx.lineTo(x, y+Math.sin(x*0.018+i)*amp);
+      ctx.stroke();
+    }
+    for(let i=0;i<90;i++){
+      const y=Math.random()*c.height;
+      ctx.strokeStyle=`rgba(18,5,0,${0.025+Math.random()*0.05})`; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(c.width,y+Math.random()*8-4); ctx.stroke();
+    }
+    for(let i=0;i<7;i++){
+      const x=Math.random()*512, y=Math.random()*512, r=6+Math.random()*18;
+      const gr=ctx.createRadialGradient(x,y,1,x,y,r);
+      gr.addColorStop(0,'rgba(20,8,2,0.35)'); gr.addColorStop(1,'rgba(20,8,2,0)');
+      ctx.fillStyle=gr; ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill();
+    }
+    const tex=new THREE.CanvasTexture(c);
+    tex.colorSpace=THREE.SRGBColorSpace;
+    tex.wrapS=tex.wrapT=THREE.RepeatWrapping;
+    tex.repeat.set(1.8,1.2);
+    return tex;
+  }
+  function makeSpeakerTexture(){
+    const c=document.createElement('canvas'); c.width=512; c.height=256;
+    const ctx=c.getContext('2d');
+    ctx.fillStyle='#241a12'; ctx.fillRect(0,0,c.width,c.height);
+    ctx.fillStyle='#8b6948';
+    for(let y=6;y<c.height;y+=10) for(let x=6;x<c.width;x+=10){
+      ctx.beginPath(); ctx.arc(x,y,1.7,0,Math.PI*2); ctx.fill();
+    }
+    ctx.strokeStyle='rgba(190,140,90,.32)'; ctx.lineWidth=1;
+    for(let y=0;y<c.height;y+=10){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(c.width,y);ctx.stroke();}
+    const tex=new THREE.CanvasTexture(c);
+    tex.colorSpace=THREE.SRGBColorSpace;
+    tex.wrapS=tex.wrapT=THREE.RepeatWrapping;
+    tex.repeat.set(2.2,1.0);
+    return tex;
+  }
+  function makeDialPlateTexture(){
+    const c=document.createElement('canvas'); c.width=256; c.height=512;
+    const ctx=c.getContext('2d');
+    ctx.fillStyle='#3a1e0e'; ctx.fillRect(0,0,256,512);
+    ctx.fillStyle='#c99a4e'; ctx.textAlign='center';
+    ctx.font='14px Georgia,serif'; ctx.fillStyle='rgba(230,190,120,.9)';
+    const nums=['2','3','4','5','6','7','8','9','10','11','12','13'];
+    nums.forEach((n,i)=>{
+      const a=(-135+i*(270/(nums.length-1)))*Math.PI/180;
+      ctx.fillText(n,128+Math.sin(a)*84,108-Math.cos(a)*84+5);
+    });
+    ctx.font='600 17px Georgia,serif'; ctx.fillStyle='#c99a4e';
+    ctx.fillText('VHF',128,172);
+    ctx.font='600 16px Georgia,serif';
+    ctx.fillText('UHF',128,282);
+    ctx.fillStyle='rgba(230,190,120,.9)';
+    for(let i=0;i<=10;i++){ctx.fillRect(52+i*15,296,2,12);}
+    ctx.fillStyle='#c99a4e'; ctx.font='13px Georgia,serif';
+    ctx.fillText('VOLUME',128,338);
+    ctx.fillText('BRIGHT',128,420);
+    const tex=new THREE.CanvasTexture(c);
+    tex.colorSpace=THREE.SRGBColorSpace;
+    return tex;
+  }
+  const woodTex = makeWoodTexture();
+  const speakerTex = makeSpeakerTexture();
+  const dialPlateTex = makeDialPlateTexture();
+
+  const staticCanvas = document.createElement("canvas");
+  staticCanvas.width=256; staticCanvas.height=192;
+  const sctx = staticCanvas.getContext("2d");
+  const staticTex = new THREE.CanvasTexture(staticCanvas);
+  staticTex.colorSpace = THREE.SRGBColorSpace;
+
+  const wood = new THREE.MeshStandardMaterial({map:woodTex,color:0x7b3d1e,roughness:.52,metalness:.04});
+  const darkWood = new THREE.MeshStandardMaterial({map:woodTex,color:0x4a2110,roughness:.6,metalness:.03});
+  const trimWood = new THREE.MeshStandardMaterial({color:0x5f2a13,roughness:.42,metalness:.05});
+  const railWood = new THREE.MeshStandardMaterial({map:woodTex,color:0x8a4a22,roughness:.45,metalness:.05});
+  const bronze = new THREE.MeshStandardMaterial({color:0xb28a45,roughness:.34,metalness:.85});
+  const blackMetal = new THREE.MeshStandardMaterial({color:0x1f1d18,roughness:.52,metalness:.55});
+  const antennaMat = new THREE.MeshStandardMaterial({color:0x8a8d90,roughness:.3,metalness:.9});
+
+  const screenInnerMaterial = new THREE.MeshStandardMaterial({
+    map: staticTex, color:0x394238, roughness:.75, metalness:0,
+    emissive:new THREE.Color(0x1f281e), emissiveIntensity:.12
+  });
+  const screenGlassMat = new THREE.MeshPhysicalMaterial({
+    color:0x9aa39c, roughness:.08, metalness:0,
+    transparent:true, opacity:.07, clearcoat:1, clearcoatRoughness:.08,
+    reflectivity:.6, depthWrite:false
+  });
+
+  function add(mesh,x=0,y=0,z=0,parent=tv){
+    mesh.position.set(x,y,z); mesh.castShadow=true; mesh.receiveShadow=true;
+    parent.add(mesh); return mesh;
+  }
+  const CAB_W=5.9, CAB_H=2.8, CAB_D=1.55;
+  add(new THREE.Mesh(new RoundedBoxGeometry(CAB_W,CAB_H,CAB_D,6,.12),wood),0,2.02,0);
+  const topLip = add(new THREE.Mesh(new RoundedBoxGeometry(CAB_W+0.22,0.16, CAB_D+0.14,4,.05),trimWood),0,3.48,0.02);
+  topLip.rotation.z = 0.004;
+  add(new THREE.Mesh(new RoundedBoxGeometry(CAB_W+0.14,0.14, CAB_D+0.1,4,.04),trimWood),0,0.58,0);
+  for(const s of [-1,1]){
+    add(new THREE.Mesh(new RoundedBoxGeometry(0.28,2.95,0.18,3,.05),railWood), s*(CAB_W/2-0.02), 2.02, 0.78);
+    const rail = add(new THREE.Mesh(new THREE.BoxGeometry(0.12,0.14,CAB_D+0.1),railWood), s*(CAB_W/2+0.02), 3.32, 0);
+    rail.rotation.z = s*0.01;
+  }
+  add(new THREE.Mesh(new RoundedBoxGeometry(5.5,2.3,0.14,5,.05),darkWood),0,2.08,0.78);
+  add(new THREE.Mesh(new RoundedBoxGeometry(3.5,2.15,0.24,10,.3),
+    new THREE.MeshStandardMaterial({color:0x26231d,roughness:.58,metalness:.08})),-0.85,2.2,0.92);
+
+  function curvedPanel(w,h,bulge,segW=28,segH=18){
+    const geo = new THREE.PlaneGeometry(w,h,segW,segH);
+    const pos = geo.attributes.position;
+    for(let i=0;i<pos.count;i++){
+      const x=pos.getX(i)/(w/2), y=pos.getY(i)/(h/2);
+      const d = Math.max(0, 1 - (x*x*0.85 + y*y*0.9));
+      pos.setZ(i, bulge*d*d);
+    }
+    geo.computeVertexNormals();
+    return geo;
+  }
+  const innerScreen = new THREE.Mesh(curvedPanel(2.85,1.78,0.22), screenInnerMaterial);
+  innerScreen.position.set(-0.85,2.2,1.06);
+  tv.add(innerScreen);
+  const glass = new THREE.Mesh(curvedPanel(2.85,1.78,0.24), screenGlassMat);
+  glass.position.set(-0.85,2.2,1.075);
+  tv.add(glass);
+
+  add(new THREE.Mesh(new RoundedBoxGeometry(1.35,2.15,0.14,4,.04),
+    new THREE.MeshStandardMaterial({color:0x673118,roughness:.5})),1.85,2.2,0.9);
+  const plate = new THREE.Mesh(new THREE.PlaneGeometry(1.05,2.0),
+    new THREE.MeshStandardMaterial({map:dialPlateTex,roughness:.55,metalness:.15}));
+  plate.position.set(1.85,2.2,0.98);
+  tv.add(plate);
+  for(const y of [1.94,1.64]){
+    add(new THREE.Mesh(new THREE.BoxGeometry(1.15,0.025,0.02),bronze),1.85,y,0.985);
+  }
+  function dial(x,y,radius,depth,detail=true){
+    const grp=new THREE.Group();
+    const body=new THREE.Mesh(new THREE.CylinderGeometry(radius,radius,depth,40),bronze);
+    body.rotation.x=Math.PI/2; body.castShadow=true; grp.add(body);
+    if(detail){
+      const cap=new THREE.Mesh(new THREE.CylinderGeometry(radius*0.7,radius*0.7,depth*1.05,32),
+        new THREE.MeshStandardMaterial({color:0x2e251b,roughness:.5,metalness:.25}));
+      cap.rotation.x=Math.PI/2; cap.position.z=0.02; grp.add(cap);
+      const marker=new THREE.Mesh(new THREE.BoxGeometry(radius*0.09,radius*0.52,0.03),
+        new THREE.MeshBasicMaterial({color:0xe8d49a}));
+      marker.position.set(0,radius*0.2,depth*0.58); grp.add(marker);
+      for(let i=0;i<18;i++){
+        const a=i/18*Math.PI*2;
+        const tick=new THREE.Mesh(new THREE.BoxGeometry(0.015,0.03,0.02),blackMetal);
+        tick.position.set(Math.cos(a)*radius*0.98,Math.sin(a)*radius*0.98,0);
+        grp.add(tick);
+      }
+    }
+    grp.position.set(x,y,1.06);
+    tv.add(grp);
+    return grp;
+  }
+  const powerDial = dial(1.85,2.78,0.20,0.13,true);
+  dial(1.85,2.32,0.15,0.10,true);
+  dial(1.85,1.76,0.09,0.08,false);
+  dial(1.85,1.44,0.09,0.08,false);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.26,0.014,10,48),bronze);
+  ring.position.set(1.85,2.78,1.06); tv.add(ring);
+
+  add(new THREE.Mesh(new RoundedBoxGeometry(5.2,0.55,0.12,4,.03),trimWood),0,0.98,0.80);
+  const speaker = new THREE.Mesh(new THREE.PlaneGeometry(4.85,0.36),
+    new THREE.MeshStandardMaterial({map:speakerTex,roughness:.9}));
+  speaker.position.set(0,0.98,0.87); tv.add(speaker);
+  add(new THREE.Mesh(new THREE.BoxGeometry(5.0,0.02,0.01),bronze),0,0.98,0.875);
+
+  const hump = add(new THREE.Mesh(new RoundedBoxGeometry(3.2,2.0,1.1,5,.3),darkWood),-0.7,2.1,-0.9);
+  hump.scale.set(1,1,1);
+
+  function sideHandle(x){
+    const g2=new THREE.Group();
+    for(const dy of [0.12,-0.12]){
+      const p=new THREE.Mesh(new THREE.CylinderGeometry(0.028,0.028,0.28,12),bronze);
+      p.rotation.z=Math.PI/2; p.position.y=dy; g2.add(p);
+    }
+    const bridge=new THREE.Mesh(new THREE.TorusGeometry(0.12,0.025,10,24,Math.PI),bronze);
+    bridge.rotation.z=Math.PI/2; bridge.position.x = x>0?-0.08:0.08; g2.add(bridge);
+    g2.position.set(x,2.3,0.8); tv.add(g2);
+  }
+  sideHandle(-2.72); sideHandle(2.72);
+
+  function makeLeg(x,z,tiltX,tiltZ){
+    const g2=new THREE.Group();
+    const leg=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.032,1.25,10),wood);
+    leg.position.y=-0.55; leg.castShadow=true; g2.add(leg);
+    const ferrule=new THREE.Mesh(new THREE.CylinderGeometry(0.034,0.034,0.12,12),bronze);
+    ferrule.position.y=-1.16; g2.add(ferrule);
+    const foot=new THREE.Mesh(new THREE.SphereGeometry(0.034,12,12),blackMetal);
+    foot.position.y=-1.23; g2.add(foot);
+    g2.position.set(x,0.55,z);
+    g2.rotation.z=tiltZ; g2.rotation.x=tiltX;
+    tv.add(g2);
+  }
+  makeLeg(-2.55, 0.5, -0.12, -0.16);
+  makeLeg( 2.55, 0.5, -0.12,  0.16);
+  makeLeg(-2.45,-0.5,  0.12, -0.12);
+  makeLeg( 2.45,-0.5,  0.12,  0.12);
+  const stretcher = new THREE.Mesh(new THREE.CylinderGeometry(0.025,0.025,4.8,8),darkWood);
+  stretcher.rotation.z=Math.PI/2; stretcher.position.set(0,-0.35,-0.72); stretcher.castShadow=true;
+  tv.add(stretcher);
+
+  add(new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.19,0.16,24),blackMetal),0.05,3.63,-0.02);
+  add(new THREE.Mesh(new THREE.SphereGeometry(0.09,20,20),bronze),0.05,3.73,-0.02);
+  function cylinderBetween(a,b,r){
+    const mid=new THREE.Vector3().addVectors(a,b).multiplyScalar(0.5);
+    const m=new THREE.Mesh(new THREE.CylinderGeometry(r,r,a.distanceTo(b),8),antennaMat);
+    m.position.copy(mid);
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),new THREE.Vector3().subVectors(b,a).normalize());
+    m.castShadow=true; tv.add(m); return m;
+  }
+  const joint=new THREE.Vector3(0.05,3.76,-0.02);
+  const leftTip=new THREE.Vector3(-1.15,6.1,-0.1);
+  const rightTip=new THREE.Vector3(1.75,5.55,-0.1);
+  cylinderBetween(joint,leftTip,0.012);
+  cylinderBetween(joint,rightTip,0.012);
+  for(const p of [leftTip,rightTip]){
+    const tip=new THREE.Mesh(new THREE.SphereGeometry(0.026,10,10),antennaMat);
+    tip.position.copy(p); tv.add(tip);
+  }
+  const coilCurve=new THREE.CatmullRomCurve3(Array.from({length:42},(_,i)=>{
+    const t=i/41, turns=t*Math.PI*12;
+    return new THREE.Vector3(0.05+Math.cos(turns)*0.055, 3.84+t*0.7, 0.0+Math.sin(turns)*0.055);
+  }));
+  tv.add(new THREE.Mesh(new THREE.TubeGeometry(coilCurve,100,0.008,6,false),antennaMat));
+
+  let powered=false;
+  function drawStatic(){
+    const w=staticCanvas.width,h=staticCanvas.height;
+    const img=sctx.createImageData(w,h);
+    if(!powered){
+      for(let i=0;i<img.data.length;i+=4){img.data[i]=40;img.data[i+1]=48;img.data[i+2]=41;img.data[i+3]=255;}
+    }else{
+      for(let i=0;i<img.data.length;i+=4){
+        const n=Math.random()*160+45;
+        img.data[i]=n*0.86;img.data[i+1]=n*0.95;img.data[i+2]=n*0.84;img.data[i+3]=255;
+      }
+      for(let y=0;y<h;y+=4) for(let x=0;x<w;x++){
+        const idx=(y*w+x)*4; img.data[idx]*=0.7;img.data[idx+1]*=0.7;img.data[idx+2]*=0.7;
+      }
+    }
+    sctx.putImageData(img,0,0);
+    staticTex.needsUpdate=true;
+    screenInnerMaterial.emissiveIntensity = powered?1.35:0.12;
+  }
+  drawStatic();
+  function togglePower(){
+    powered=!powered;
+    powerDial.rotation.z+=Math.PI*0.34;
+    drawStatic();
+  }
+  return {group:tv, innerScreen, glass, powerDial, drawStatic, togglePower,
+    screenW:2.85, screenH:1.78, screenMat:screenInnerMaterial,
+    get powered(){return powered;}};
+}
+
+/* ============================================================
+   ASSEMBLE — devices under one physics controller
+   ============================================================ */
+const crt = buildCRT();
+const lap = buildLaptop();
+const tvd = buildTV();
+
+const crtFlight = new THREE.Group(); crtFlight.add(crt.group); scene.add(crtFlight);
+const lapFlight = new THREE.Group(); lapFlight.add(lap.group); scene.add(lapFlight);
+const tvFlight  = new THREE.Group(); tvFlight.add(tvd.group);
+/* True-to-life scale hierarchy, staged not remodeled:
+   console TV biggest, CRT middle, laptop smallest. */
+const CRT_S = 0.72, LAP_S = 0.50, TV_S = 1.0;
+crt.group.scale.setScalar(CRT_S);
+lap.group.scale.setScalar(LAP_S);
+tvd.group.scale.setScalar(TV_S);
+tvd.group.position.y = -0.55;
+scene.add(tvFlight);
+/* hidden until Rapier boots and spawns them — the void starts empty */
+crtFlight.visible = false; lapFlight.visible = false; tvFlight.visible = false;
+
+/* Collider quats in flight space (account for inner offsets:
+   laptop base yaw -18°, lid = yaw(-18°) * tilt(-12°)). */
+const _ce = new THREE.Euler(), _cq = new THREE.Quaternion();
+function Q(x, y, z, order){
+  _ce.set(x, y, z, order || "XYZ");
+  _cq.setFromEuler(_ce);
+  return [_cq.x, _cq.y, _cq.z, _cq.w];
+}
+const D2R = THREE.MathUtils.degToRad;
+const IDENT_Q = [0, 0, 0, 1];
+
+const falling = new FallingDevices({ scene, camera, renderer });
+/* The drop: staggered slots down an empty shaft. The TV drops hard
+   and runs ahead; CRT drifts in the middle; laptop floats last and
+   slowest. Wide x separation so they never pile — the space between
+   them is the composition. Small tilts, slow rotation, no floor. */
+falling.init([
+  {
+    name: "tv", object: tvFlight,
+    delay: 0,
+    position: { x: 0.5, y: 15.5, z: 0 },
+    rotation: { x: D2R(3), y: D2R(-4), z: D2R(2) },
+    velocity: { x: 0, y: -1, z: 0 },
+    angularVelocity: { x: 0.15, y: 0.10, z: -0.12 },
+    mass: 30, dropDamp: 3.0, dropG: 1.35, fallDamp: 13,
+    colliders: [
+      { h: [2.95, 1.5, 0.85], p: [0, 1.47, 0], q: IDENT_Q },
+      { h: [1.6, 1.0, 0.55],  p: [-0.7, 1.55, -0.9], q: IDENT_Q },
+      { h: [2.4, 0.9, 0.6],   p: [0, -0.9, 0], q: IDENT_Q },
+    ],
+  },
+  {
+    name: "crt", object: crtFlight,
+    delay: 0.4,
+    position: { x: -1.8, y: 16.5, z: 0.3 },
+    rotation: { x: D2R(-2), y: D2R(3), z: D2R(-3) },
+    velocity: { x: 0, y: -0.5, z: 0 },
+    angularVelocity: { x: -0.12, y: 0.15, z: 0.10 },
+    mass: 14, dropDamp: 3.2, dropG: 1.0, fallDamp: 24,
+    colliders: [
+      { h: [2.016, 1.584, 1.224], p: [0, 0, 0], q: IDENT_Q },
+      { h: [1.332, 0.252, 0.936], p: [0, -2.16, 0.036], q: IDENT_Q },
+    ],
+  },
+  {
+    name: "laptop", object: lapFlight,
+    delay: 0.9,
+    position: { x: 2.2, y: 17.5, z: -0.3 },
+    rotation: { x: D2R(4), y: D2R(-2), z: D2R(4) },
+    velocity: { x: 0, y: -0.5, z: 0 },
+    angularVelocity: { x: 0.20, y: -0.15, z: 0.18 },
+    mass: 4, dropDamp: 2.4, dropG: 0.85, fallDamp: 37,
+    colliders: [
+      /* base (inner offset rotated by base yaw) */
+      { h: [1.6, 0.075, 1.05], p: [0, 0.1, 0], q: Q(0, D2R(-18), 0) },
+      /* open lid: pivot + tilted center, then base yaw */
+      { h: [1.5875, 0.9375, 0.05], p: [0.3725, 1.06, -1.1465],
+        q: Q(D2R(-12), D2R(-18), 0, "YXZ") },
+    ],
+  },
+]);
+
+/* ============================================================
+   CAMERA RIG + FOCUS + GRAB.
+   Click a screen: the camera flies in and that machine is yours
+   (body frozen so the screen is stable). ESC / button steps back
+   out. Drag a body: its fall suspends while held.
+   ============================================================ */
+const easeIO = (t) => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const _tgt = OVERVIEW_TGT.clone();
+let camTween = null;
+function tweenCamTo(p1, t1, dur, done){
+  camTween = {t:0, dur, p0:camera.position.clone(), p1:p1.clone(),
+              t0:_tgt.clone(), t1:t1.clone(), done};
+}
+function computeFocusPose(mesh, w, h){
+  mesh.updateWorldMatrix(true,false);
+  const center = new THREE.Vector3(); mesh.getWorldPosition(center);
+  const q = new THREE.Quaternion(); mesh.getWorldQuaternion(q);
+  const normal = new THREE.Vector3(0,0,1).applyQuaternion(q).normalize();
+  const up = new THREE.Vector3(0,1,0);
+  const side = new THREE.Vector3().crossVectors(normal,up);
+  if(side.lengthSq() < 1e-6) side.set(1,0,0); else side.normalize();
+  const vFov = THREE.MathUtils.degToRad(camera.fov);
+  const hFov = 2*Math.atan(Math.tan(vFov/2)*camera.aspect);
+  const fitH = (h/2)/Math.tan(vFov/2)/0.90;
+  const fitW = (w/2)/Math.tan(hFov/2)/0.92;
+  const dist = THREE.MathUtils.clamp(Math.max(fitH,fitW), 2, 14);
+  const pos = center.clone()
+    .addScaledVector(normal, dist)
+    .addScaledVector(up, dist*0.04)
+    .addScaledVector(side, dist*0.025);
+  return {pos, tgt:center.clone()};
+}
+
+const exitBtn = document.getElementById("exitBtn");
+const hud = document.getElementById("hud");
+let focused = null;          // 'crt' | 'laptop' | 'tv' | null
+let downInfo = null;         // pending click (screen focus vs grab decision)
+
+function setPtr(e){
+  _ptr.x = (e.clientX/innerWidth)*2-1;
+  _ptr.y = -(e.clientY/innerHeight)*2+1;
+}
+function rayScreens(e){
+  setPtr(e); _ray.setFromCamera(_ptr, camera);
+  if(_ray.intersectObject(crt.display, false).length) return "crt";
+  if(_ray.intersectObject(lap.display, false).length) return "laptop";
+  if(_ray.intersectObjects([tvd.glass, tvd.innerScreen], false).length) return "tv";
+  return null;
+}
+
+function enterFocus(name){
+  if(focused) return;
+  focused = name;
+  exitBtn.classList.add("show");
+  hud.classList.add("gone");
+  renderer.domElement.style.cursor = "none";
+  let mesh, w, h;
+  if(name==="crt"){ mesh=crt.display; w=crt.screenW*CRT_S; h=crt.screenH*CRT_S;
+    if(!crt.S.power){ crt.togglePower(); } }
+  if(name==="laptop"){ mesh=lap.display; w=lap.screenW*LAP_S; h=lap.screenH*LAP_S;
+    lap.cursorActive = true; }
+  if(name==="tv"){ mesh=tvd.innerScreen; w=tvd.screenW*TV_S; h=tvd.screenH*TV_S;
+    if(!tvd.powered){ tvd.togglePower(); } }
+  const pose = computeFocusPose(mesh, w, h);
+  tweenCamTo(pose.pos, pose.tgt, 1.4, ()=>{});
+  falling.setFrozen(name, true);
+}
+function exitFocus(){
+  if(!focused) return;
+  falling.setFrozen(focused, false);
+  if(focused==="laptop"){ lap.cursorActive = false; lap.winDragging = false; }
+  focused = null;
+  exitBtn.classList.remove("show");
+  hud.classList.remove("gone");
+  renderer.domElement.style.cursor = "default";
+  tweenCamTo(OVERVIEW_POS, OVERVIEW_TGT, 1.25, ()=>{});
+}
+exitBtn.addEventListener("click", exitFocus);
+addEventListener("keydown", (e)=>{
+  if(e.key === "Escape"){
+    if(focused){ exitFocus(); return; }
+    if(lap.winDragging) lap.winDragging = false;
+    return;
+  }
+  if(focused === "laptop" && !e.metaKey && !e.ctrlKey && !e.altKey){
+    lap.flashKey(e.code);
+    const m = lap.keyByCode[e.code]; if(m) m.userData.held = true;
+    if(e.code === "Backspace") lap.typeKey("back");
+    else if(e.key && e.key.length === 1) lap.typeKey(e.key);
+    if(e.key === " " || e.key === "Tab") e.preventDefault();
+  }
+});
+addEventListener("keyup", (e)=>{
+  const m = lap.keyByCode[e.code]; if(m) m.userData.held = false;
+});
+
+renderer.domElement.addEventListener("pointerdown", (e)=>{
+  if(focused){
+    /* laptop window title drag while inside */
+    if(focused === "laptop"){
+      const c = lap.cursor;
+      if(lap.windowOpen && lap.inTitle(c.x, c.y) && !lap.inClose(c.x, c.y)){
+        lap.winDragging = true;
+        lap.setWinGrab(lap.WIN.x - c.x, lap.WIN.y - c.y);
+      }
+    }
+    return;
+  }
+  /* click a screen to step inside; bodies stay where they are */
+  const scr = rayScreens(e);
+  if(scr){ downInfo = {x:e.clientX, y:e.clientY, kind:"focus", screen:scr}; return; }
+});
+renderer.domElement.addEventListener("pointermove", (e)=>{
+  if(focused === "laptop"){
+    /* drive the virtual cursor from the real pointer via screen UV */
+    setPtr(e); _ray.setFromCamera(_ptr, camera);
+    const hit = _ray.intersectObject(lap.display, false)[0];
+    if(hit && hit.uv){
+      const c = lap.cursor;
+      c.x = THREE.MathUtils.clamp(hit.uv.x*lap.OS_W, 0, lap.OS_W);
+      c.y = THREE.MathUtils.clamp((1-hit.uv.y)*lap.OS_H, 0, lap.OS_H);
+      if(lap.winDragging){ lap.setWIN(c.x+lap.winGrab.dx, c.y+lap.winGrab.dy); }
+    }
+    return;
+  }
+  if(focused) return;
+});
+renderer.domElement.addEventListener("pointerup", (e)=>{
+  if(focused){
+    /* clicks while inside go to the device OS */
+    if(focused === "crt"){
+      setPtr(e); _ray.setFromCamera(_ptr, camera);
+      if(_ray.intersectObject(crt.powerButton, false).length){ crt.togglePower(); return; }
+      const dh = _ray.intersectObject(crt.display, false)[0];
+      if(dh && dh.uv) crt.clickOS(Math.floor(dh.uv.x*640), Math.floor((1-dh.uv.y)*480));
+    }else if(focused === "laptop"){
+      const c = lap.cursor;
+      if(lap.windowOpen){
+        if(lap.inClose(c.x,c.y)){ lap.handleVirtualClick(c.x,c.y); return; }
+        if(lap.inTitle(c.x,c.y)){ return; }
+        return;
+      }
+      lap.handleVirtualClick(c.x, c.y);
+    }else if(focused === "tv"){
+      setPtr(e); _ray.setFromCamera(_ptr, camera);
+      if(_ray.intersectObject(tvd.powerDial, true).length){ tvd.togglePower(); }
+    }
+    lap.winDragging = false;
+    return;
+  }
+  if(!downInfo) return;
+  /* click (not drag) on a screen steps inside */
+  if(Math.hypot(e.clientX-downInfo.x, e.clientY-downInfo.y) > 6){ downInfo = null; return; }
+  if(downInfo.kind === "focus") enterFocus(downInfo.screen);
+  downInfo = null;
+});
+renderer.domElement.addEventListener("pointercancel", (e)=>{
+  downInfo = null;
+  lap.winDragging = false;
+});
+renderer.domElement.addEventListener("wheel", (e)=>{
+  if(focused === "crt" && crt.S.pdfOpen){
+    crt.S.pdfScroll = THREE.MathUtils.clamp(crt.S.pdfScroll + e.deltaY*.3, 0, 80);
+    e.preventDefault();
+  }else if(focused === "laptop" && lap.windowOpen){
+    lap.scrollPdf(e.deltaY*.6);
+    e.preventDefault();
+  }
+}, {passive:false});
+
+/* ============================================================
+   MAIN LOOP — controller steps physics, Three.js renders
+   ============================================================ */
+const clock = new THREE.Clock();
+let hidden = false;
+let staticAcc = 0;
+let uiTick = 0;
+document.addEventListener("visibilitychange", ()=>{ hidden = document.hidden; });
+
+function animate(){
+  requestAnimationFrame(animate);
+  if(hidden) return;
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
+
+  falling.update(dt);
+
+  /* camera flights (screen focus transitions) */
+  if(camTween){
+    camTween.t += dt/camTween.dur;
+    const k = easeIO(Math.min(1, camTween.t));
+    camera.position.lerpVectors(camTween.p0, camTween.p1, k);
+    _tgt.lerpVectors(camTween.t0, camTween.t1, k);
+    if(camTween.t >= 1){
+      const done = camTween.done; camTween = null; done && done();
+    }
+  }
+  camera.lookAt(_tgt);
+
+  /* screens stay alive; CRT boots on its own clock.
+     Canvas redraws run at half rate — the texture uploads are the
+     most expensive per-frame work here, and 30Hz is invisible. */
+  uiTick++;
+  if(crt.S.power && !crt.S.ready){ crt.S.bootT += dt; if(crt.S.bootT > 1) crt.S.ready = true; }
+  if(uiTick % 2 === 0){
+    crt.drawScreen(t);
+    lap.drawOS();
+  }
+  lap.updateKeys();
+  if(tvd.powered){
+    staticAcc += dt;
+    if(staticAcc > 0.07){ tvd.drawStatic(); staticAcc = 0; }
+    tvd.screenMat.emissiveIntensity = 1.2 + Math.sin(performance.now()*0.016)*0.035;
+  }
+
+  renderer.render(scene, camera);
+}
+animate();
+
+addEventListener("resize", ()=>{
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  if(focused){
+    const m = focused==="crt" ? crt.display :
+              focused==="laptop" ? lap.display : tvd.innerScreen;
+    const w = focused==="crt" ? crt.screenW*CRT_S :
+              focused==="laptop" ? lap.screenW*LAP_S : tvd.screenW*TV_S;
+    const h = focused==="crt" ? crt.screenH*CRT_S :
+              focused==="laptop" ? lap.screenH*LAP_S : tvd.screenH*TV_S;
+    const pose = computeFocusPose(m, w, h);
+    camera.position.copy(pose.pos); _tgt.copy(pose.tgt);
+  }
+});
+</script>
+</body>
+</html>
