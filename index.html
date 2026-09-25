@@ -135,56 +135,128 @@ function buildCRT(){
   add(new THREE.Mesh(new RoundedBoxGeometry(1.45,.85,1.25,6,.18),plastic),0,-2.55,-.1);
   add(new THREE.Mesh(new RoundedBoxGeometry(3.7,.42,2.6,8,.18),plastic),0,-3.08,.05);
 
-  const S = {power:true, bootT:0, ready:false, pdfOpen:false, pdfScroll:0};
+  const S = {power:true, bootT:0, ready:false, pdfOpen:false, pdfScroll:0, menuOpen:false};
   const FILE_HIT = {x:262,y:180,w:116,h:130};
+  const BEGIN_HIT = {x:4,y:446,w:90,h:30};
+  const MENU = {x:4,y:356,w:172,h:90};
   function drawScreen(t){
     const W=640,H=480;
     g.fillStyle="#0b0b0c";g.fillRect(0,0,W,H);
     if(!S.power){scrTex.needsUpdate=true;return;}
+    /* retro desktop: teal field, gray taskbar, green begin button.
+       Unbranded, but you know what it misses. */
+    const desk=g.createLinearGradient(0,0,0,H);
+    desk.addColorStop(0,"#0e8282");desk.addColorStop(1,"#075e5e");
+    g.fillStyle=desk;g.fillRect(0,0,W,H);
     if(!S.ready){
-      g.fillStyle="rgba(232,230,225,.28)";
-      g.fillRect(W/2-2,H/2-2,4,4);
+      g.fillStyle="rgba(255,255,255,.75)";g.font="14px Tahoma,system-ui,sans-serif";
+      g.textBaseline="alphabetic";
+      g.fillText("please wait…",W/2-44,H/2);
       scrTex.needsUpdate=true;return;
     }
     g.textBaseline="alphabetic";
+    /* desktop icon: rx.pdf file */
+    const fx=298,fy=198;
+    g.fillStyle="#f4f4f0";
+    g.beginPath();
+    g.moveTo(fx,fy);g.lineTo(fx+32,fy);g.lineTo(fx+44,fy+12);g.lineTo(fx+44,fy+56);
+    g.lineTo(fx,fy+56);g.closePath();g.fill();
+    g.fillStyle="#c9c9c4";
+    g.beginPath();
+    g.moveTo(fx+32,fy);g.lineTo(fx+32,fy+12);g.lineTo(fx+44,fy+12);g.closePath();g.fill();
+    g.fillStyle="#a33d3d";g.fillRect(fx,fy+34,44,13);
+    g.fillStyle="#fff";g.font="bold 10px Tahoma,system-ui,sans-serif";
+    g.fillText("PDF",fx+11,fy+44);
+    g.fillStyle="#fff";g.font="12px Tahoma,system-ui,sans-serif";
+    g.fillText("rx.pdf",fx-1,fy+72);
+    /* trash icon, decorative */
+    g.fillStyle="#c9c9c4";g.fillRect(48,204,28,30);
+    g.fillStyle="#8f8f8a";g.fillRect(48,204,28,5);
+    g.fillStyle="#fff";g.font="12px Tahoma,system-ui,sans-serif";
+    g.fillText("trash",46,246);
     if(S.pdfOpen){
-      g.fillStyle="#e8e6e1";g.font="20px system-ui,sans-serif";
-      g.fillText("ryann lynn murphy",40,52);
       const px=170,py=44,pw=300,ph=392;
-      g.fillStyle="#f2efe7";g.fillRect(px,py,pw,ph);
-      g.save();g.beginPath();g.rect(px,py,pw,ph);g.clip();
+      /* window frame */
+      g.fillStyle="#d4d0c8";g.fillRect(px-3,py-3,pw+6,ph+6);
+      /* title bar */
+      const tb=g.createLinearGradient(px,0,px+pw,0);
+      tb.addColorStop(0,"#000080");tb.addColorStop(1,"#1084d0");
+      g.fillStyle=tb;g.fillRect(px,py,pw,28);
+      g.fillStyle="#fff";g.font="bold 14px Tahoma,system-ui,sans-serif";
+      g.fillText("rx.pdf — reader",px+8,py+20);
+      /* close button sits inside the existing hit region */
+      g.fillStyle="#d4d0c8";g.fillRect(426,48,44,36);
+      g.fillStyle="#fff";g.fillRect(426,48,44,2);
+      g.fillStyle="#808080";g.fillRect(426,82,44,2);
+      g.fillStyle="#404040";g.font="bold 18px Tahoma,system-ui,sans-serif";
+      g.fillText("×",442,76);
+      /* menubar */
+      g.fillStyle="#d4d0c8";g.fillRect(px,py+28,pw,20);
+      g.fillStyle="#222";g.font="12px Tahoma,system-ui,sans-serif";
+      g.fillText("File   Edit   View",px+8,py+43);
+      /* content */
+      g.fillStyle="#fff";g.fillRect(px,py+48,pw,ph-48);
+      g.save();g.beginPath();g.rect(px,py+48,pw,ph-48);g.clip();
       g.translate(0,-S.pdfScroll);
       g.fillStyle="#1a1a1c";g.font="600 24px Georgia,serif";
-      g.fillText("rx",px+32,py+60);
-      g.fillStyle="#c9c5bb";g.fillRect(px+32,py+76,pw-64,1);
+      g.fillText("rx",px+32,py+108);
+      g.fillStyle="#c9c5bb";g.fillRect(px+32,py+124,pw-64,1);
       g.fillStyle="#55555a";g.font="15px Georgia,serif";
-      g.fillText("This file is intentionally quiet.",px+32,py+120);
-      g.fillText("There is nothing else",px+32,py+146);
-      g.fillText("on this computer.",px+32,py+172);
+      g.fillText("This file is intentionally quiet.",px+32,py+168);
+      g.fillText("There is nothing else",px+32,py+194);
+      g.fillText("on this computer.",px+32,py+220);
       g.fillStyle="#c4c0b5";
-      for(let i=0;i<4;i++)g.fillRect(px+32,py+200+i*24,pw-64-((i*53)%120),8);
+      for(let i=0;i<4;i++)g.fillRect(px+32,py+248+i*24,pw-64-((i*53)%120),8);
       g.fillStyle="#55555a";g.font="13px system-ui,sans-serif";
-      g.fillText("— end of file —",px+32,py+330);
+      g.fillText("— end of file —",px+32,py+378);
       g.restore();
-      g.fillStyle="#8f8f96";g.font="20px system-ui,sans-serif";
-      g.fillText("×",px+pw-28,py+32);
-      scrTex.needsUpdate=true;return;
     }
-    g.fillStyle="#e8e6e1";g.font="20px system-ui,sans-serif";
-    g.fillText("ryann lynn murphy",40,52);
-    const fx=296,fy=206;
-    g.strokeStyle="rgba(232,230,225,.8)";g.lineWidth=1.5;
-    g.beginPath();
-    g.moveTo(fx,fy);g.lineTo(fx+32,fy);g.lineTo(fx+48,fy+16);g.lineTo(fx+48,fy+60);
-    g.lineTo(fx,fy+60);g.closePath();g.stroke();
-    g.beginPath();g.moveTo(fx+32,fy);g.lineTo(fx+32,fy+16);g.lineTo(fx+48,fy+16);g.stroke();
-    g.fillStyle="#8f8f96";g.font="14px system-ui,sans-serif";
-    g.fillText("rx.pdf",fx-1,fy+84);
-    if(Math.floor(t*1.4)%2===0){g.fillStyle="#e8e6e1";g.fillRect(40,H-52,9,17);}
+    /* taskbar */
+    g.fillStyle="#d4d0c8";g.fillRect(0,H-34,W,34);
+    g.fillStyle="#ffffff";g.fillRect(0,H-34,W,2);
+    /* begin button */
+    const bg=g.createLinearGradient(0,H-30,0,H-4);
+    bg.addColorStop(0,"#3f9e4d");bg.addColorStop(1,"#2c7a38");
+    g.fillStyle=bg;g.fillRect(4,H-30,90,26);
+    g.fillStyle="#fff";g.font="bold 15px Tahoma,system-ui,sans-serif";
+    g.fillText("begin",22,H-11);
+    g.fillStyle="#e8e8e8";g.fillRect(10,H-25,14,14);
+    g.fillStyle="#3f9e4d";g.fillRect(12,H-23,10,4);
+    g.fillStyle="#d4a017";g.fillRect(12,H-18,10,4);
+    /* task button while the reader is open */
+    if(S.pdfOpen){
+      g.fillStyle="#b8b4ac";g.fillRect(100,H-30,180,26);
+      g.fillStyle="#222";g.font="12px Tahoma,system-ui,sans-serif";
+      g.fillText("rx.pdf — reader",108,H-12);
+    }
+    /* tray clock */
+    g.fillStyle="#b8b4ac";g.fillRect(W-92,H-30,88,26);
+    g.fillStyle="#222";g.font="12px Tahoma,system-ui,sans-serif";
+    g.fillText(new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),W-80,H-12);
+    /* begin menu */
+    if(S.menuOpen){
+      g.fillStyle="#d4d0c8";g.fillRect(MENU.x,MENU.y,MENU.w,MENU.h);
+      g.fillStyle="#fff";g.fillRect(MENU.x,MENU.y,MENU.w,2);
+      g.fillStyle="#222";g.font="13px Tahoma,system-ui,sans-serif";
+      g.fillText("reader",MENU.x+12,MENU.y+26);
+      g.fillStyle="#808080";g.fillRect(MENU.x+4,MENU.y+44,MENU.w-8,1);
+      g.fillText("shut down",MENU.x+12,MENU.y+72);
+    }
     scrTex.needsUpdate=true;
   }
   function clickOS(px,py){
     if(!S.ready||!S.power) return;
+    const inBegin=px>BEGIN_HIT.x&&px<BEGIN_HIT.x+BEGIN_HIT.w&&py>BEGIN_HIT.y&&py<BEGIN_HIT.y+BEGIN_HIT.h;
+    if(S.menuOpen){
+      if(px>MENU.x+4&&px<MENU.x+MENU.w-4&&py>MENU.y+4&&py<MENU.y+40){
+        S.menuOpen=false;S.pdfOpen=true;S.pdfScroll=0;return;
+      }
+      if(px>MENU.x+4&&px<MENU.x+MENU.w-4&&py>MENU.y+48&&py<MENU.y+82){
+        S.menuOpen=false;togglePower();return;
+      }
+      S.menuOpen=false;
+      if(inBegin) return;
+    }else if(inBegin){ S.menuOpen=true; return; }
     if(S.pdfOpen){
       if(px>426&&px<470&&py>44&&py<88){S.pdfOpen=false;S.pdfScroll=0;}
       return;
@@ -194,7 +266,7 @@ function buildCRT(){
     }
   }
   function togglePower(){
-    S.power=!S.power; S.bootT=0; S.ready=false; S.pdfOpen=false; S.pdfScroll=0;
+    S.power=!S.power; S.bootT=0; S.ready=false; S.pdfOpen=false; S.pdfScroll=0; S.menuOpen=false;
     led.material=S.power?ledOn:ledOff;
     powerButton.position.z-= .06; setTimeout(()=>powerButton.position.z+=.06,120);
   }
@@ -237,66 +309,81 @@ function buildLaptop(){
 
   function drawOS(){
     const now=performance.now();
-    const g=ctx.createLinearGradient(0,0,0,OS_H);
-    g.addColorStop(0,"#24365c");g.addColorStop(1,"#0a0f1e");
+    /* unbranded dark workstation: deep indigo field, near-black top bar */
+    const g=ctx.createLinearGradient(0,0,OS_W,OS_H);
+    g.addColorStop(0,"#232b45");g.addColorStop(.55,"#161b2e");g.addColorStop(1,"#0b0e18");
     ctx.fillStyle=g;ctx.fillRect(0,0,OS_W,OS_H);
-    ctx.fillStyle="rgba(255,255,255,.92)";ctx.fillRect(0,0,OS_W,32);
-    ctx.fillStyle="#111";ctx.font="14px system-ui";ctx.textBaseline="middle";
-    ctx.fillText("Ryann OS",14,17);
+    /* faint terminal-grid texture */
+    ctx.fillStyle="rgba(120,160,255,.045)";
+    for(let gx=0;gx<OS_W;gx+=32)ctx.fillRect(gx,32,1,OS_H-32);
+    for(let gy=32;gy<OS_H;gy+=32)ctx.fillRect(0,gy,OS_W,1);
+    ctx.fillStyle="#0a0c11";ctx.fillRect(0,0,OS_W,32);
+    ctx.fillStyle="#e8eaf0";ctx.font="600 14px system-ui";ctx.textBaseline="middle";
+    ctx.fillText("ryann",14,17);
+    ctx.fillStyle="#8b93a7";ctx.font="14px system-ui";
+    ctx.fillText("desktop",72,17);
     ctx.textAlign="right";
+    ctx.fillStyle="#c9cfdd";
     ctx.fillText(new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})+"   100%",OS_W-14,17);
     ctx.textAlign="left";
     const ix=ICON.x,iy=ICON.y;
-    if(selected){ctx.fillStyle="rgba(80,160,255,.45)";rr(ix-10,iy-8,ICON.w+20,ICON.h+22,12);ctx.fill();}
-    ctx.fillStyle="#fff";ctx.strokeStyle="rgba(0,0,0,.25)";
+    if(selected){ctx.fillStyle="rgba(90,140,255,.35)";rr(ix-10,iy-8,ICON.w+20,ICON.h+22,12);ctx.fill();}
+    ctx.fillStyle="#dfe3ec";ctx.strokeStyle="rgba(0,0,0,.5)";
     ctx.beginPath();ctx.moveTo(ix+10,iy);ctx.lineTo(ix+70,iy);ctx.lineTo(ix+86,iy+16);
     ctx.lineTo(ix+86,iy+84);ctx.lineTo(ix+10,iy+84);ctx.closePath();ctx.fill();ctx.stroke();
-    ctx.fillStyle="#e11d48";ctx.fillRect(ix+10,iy+52,76,22);
+    ctx.fillStyle="#b02a37";ctx.fillRect(ix+10,iy+52,76,22);
     ctx.fillStyle="#fff";ctx.font="bold 13px system-ui";ctx.fillText("PDF",ix+32,iy+64);
-    ctx.fillStyle="#fff";ctx.font="13px system-ui";ctx.textAlign="center";
+    ctx.fillStyle="#e8eaf0";ctx.font="13px system-ui";ctx.textAlign="center";
     ctx.fillText("rx.pdf",ix+48,iy+102);ctx.textAlign="left";
     if(typedBuffer && now<typedUntil){
-      ctx.fillStyle="rgba(0,0,0,.65)";rr(OS_W/2-180,OS_H-52,360,34,17);ctx.fill();
-      ctx.fillStyle="#fff";ctx.font="15px ui-monospace,monospace";ctx.textAlign="center";
-      ctx.fillText("> "+typedBuffer.slice(-28),OS_W/2,OS_H-34);ctx.textAlign="left";
+      ctx.fillStyle="rgba(5,8,12,.92)";rr(OS_W/2-180,OS_H-52,360,34,17);ctx.fill();
+      ctx.strokeStyle="rgba(74,222,128,.4)";rr(OS_W/2-180,OS_H-52,360,34,17);ctx.stroke();
+      ctx.fillStyle="#4ade80";ctx.font="15px ui-monospace,monospace";ctx.textAlign="center";
+      ctx.fillText("$ "+typedBuffer.slice(-28)+"_",OS_W/2,OS_H-34);ctx.textAlign="left";
     }
     if(windowOpen){
-      ctx.save();ctx.shadowColor="rgba(0,0,0,.4)";ctx.shadowBlur=30;ctx.shadowOffsetY=10;
-      ctx.fillStyle="#fff";rr(WIN.x,WIN.y,WIN.w,WIN.h,12);ctx.fill();ctx.restore();
+      ctx.save();ctx.shadowColor="rgba(0,0,0,.6)";ctx.shadowBlur=30;ctx.shadowOffsetY=10;
+      ctx.fillStyle="#161a23";rr(WIN.x,WIN.y,WIN.w,WIN.h,12);ctx.fill();ctx.restore();
       ctx.save();rr(WIN.x,WIN.y,WIN.w,WIN.h,12);ctx.clip();
-      ctx.fillStyle="#f1f1f3";ctx.fillRect(WIN.x,WIN.y,WIN.w,TITLE_H);
-      ctx.fillStyle="#ff5f57";ctx.beginPath();ctx.arc(WIN.x+26,WIN.y+20,10,0,7);ctx.fill();
-      ctx.fillStyle="#7a0000";ctx.font="bold 12px system-ui";ctx.textAlign="center";
+      ctx.fillStyle="#232936";ctx.fillRect(WIN.x,WIN.y,WIN.w,TITLE_H);
+      ctx.strokeStyle="#3a4152";ctx.beginPath();
+      ctx.moveTo(WIN.x,WIN.y+TITLE_H+.5);ctx.lineTo(WIN.x+WIN.w,WIN.y+TITLE_H+.5);ctx.stroke();
+      ctx.fillStyle="#e0605e";ctx.beginPath();ctx.arc(WIN.x+26,WIN.y+20,10,0,7);ctx.fill();
+      ctx.fillStyle="#1a0d0d";ctx.font="bold 12px system-ui";ctx.textAlign="center";
       ctx.fillText("x",WIN.x+26,WIN.y+21);ctx.textAlign="left";
-      ctx.fillStyle="#888";ctx.beginPath();ctx.arc(WIN.x+48,WIN.y+20,8,0,7);ctx.fill();
+      ctx.fillStyle="#3a4152";ctx.beginPath();ctx.arc(WIN.x+48,WIN.y+20,8,0,7);ctx.fill();
       ctx.beginPath();ctx.arc(WIN.x+66,WIN.y+20,8,0,7);ctx.fill();
-      ctx.fillStyle="#222";ctx.font="14px system-ui";ctx.textAlign="center";
-      ctx.fillText("rx.pdf",WIN.x+WIN.w/2,WIN.y+21);ctx.textAlign="left";
+      ctx.fillStyle="#aab2c5";ctx.font="13px ui-monospace,monospace";ctx.textAlign="center";
+      ctx.fillText("rx@dev: ~/rx.pdf",WIN.x+WIN.w/2,WIN.y+21);ctx.textAlign="left";
       const cy=WIN.y+TITLE_H;
-      ctx.fillStyle="#e9e9ec";ctx.fillRect(WIN.x,cy,WIN.w,WIN.h-TITLE_H);
+      ctx.fillStyle="#0d1017";ctx.fillRect(WIN.x,cy,WIN.w,WIN.h-TITLE_H);
       ctx.save();ctx.beginPath();ctx.rect(WIN.x,cy,WIN.w,WIN.h-TITLE_H);ctx.clip();
       ctx.translate(0,-pdfScroll);
       const px=WIN.x+70, pw=WIN.w-140;
+      ctx.font="14px ui-monospace,monospace";
       for(let p=0;p<2;p++){
         const py=cy+24+p*330;
-        ctx.fillStyle="#fff";ctx.fillRect(px,py,pw,300);
-        ctx.strokeStyle="#ccc";ctx.strokeRect(px,py,pw,300);
-        ctx.fillStyle="#111";ctx.font="bold 28px Georgia";ctx.textAlign="center";
-        ctx.fillText(p===0?"rx":"( continued )",WIN.x+WIN.w/2,py+62);ctx.textAlign="left";
-        ctx.fillStyle="#555";ctx.font="14px Georgia";
         if(p===0){
-          ctx.fillText("This file is intentionally quiet.",px+40,py+110);
-          ctx.fillText("There is nothing else on this computer.",px+40,py+136);
-          ctx.fillStyle="#bbb";for(let i=0;i<4;i++)ctx.fillRect(px+40,py+165+i*22,pw-80-(i*40),10);
+          ctx.fillStyle="#7dd3fc";
+          ctx.fillText("rx@dev:~$ cat rx.pdf",px,py+30);
+          ctx.fillStyle="#d4d4d4";
+          ctx.fillText("This file is intentionally quiet.",px,py+72);
+          ctx.fillText("There is nothing else on this computer.",px,py+98);
+          ctx.fillStyle="#2c3342";
+          for(let i=0;i<4;i++)ctx.fillRect(px,py+127+i*22,pw-(i*40),10);
+          ctx.fillStyle="#5b6478";
+          ctx.fillText("rx@dev:~$ _",px,py+252);
         }else{
-          ctx.fillStyle="#bbb";for(let i=0;i<6;i++)ctx.fillRect(px+40,py+50+i*22,pw-80-(i*30),10);
-          ctx.fillStyle="#555";ctx.font="13px system-ui";ctx.fillText("— end of file —",px+40,py+230);
+          ctx.fillStyle="#2c3342";
+          for(let i=0;i<6;i++)ctx.fillRect(px,py+50+i*22,pw-(i*30),10);
+          ctx.fillStyle="#5b6478";
+          ctx.fillText("— end of file —",px,py+230);
         }
       }
       ctx.restore();ctx.restore();
     }
     if(cursorActive){
-      ctx.fillStyle="#fff";ctx.strokeStyle="#000";ctx.lineWidth=2;
+      ctx.fillStyle="#4ade80";ctx.strokeStyle="#031007";ctx.lineWidth=2;
       ctx.beginPath();ctx.moveTo(cursor.x,cursor.y);ctx.lineTo(cursor.x,cursor.y+20);
       ctx.lineTo(cursor.x+6,cursor.y+15);ctx.lineTo(cursor.x+9,cursor.y+21);
       ctx.lineTo(cursor.x+12,cursor.y+19);ctx.lineTo(cursor.x+9,cursor.y+13);
@@ -703,7 +790,7 @@ function buildTV(){
   }));
   tv.add(new THREE.Mesh(new THREE.TubeGeometry(coilCurve,100,0.008,6,false),antennaMat));
 
-  let powered=false;
+  let powered=true; /* the set never turns off — static from the first frame */
   function drawStatic(){
     const w=staticCanvas.width,h=staticCanvas.height;
     const img=sctx.createImageData(w,h);
