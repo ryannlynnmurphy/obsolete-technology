@@ -419,6 +419,25 @@ body:before{display:none;}
   .board-inner{width:calc(100% - 16px)}
   .task-button{min-width:100px}
 }
+
+/* --- EMBEDDED PASS (inside Softie) ----------------------------------
+   One solitaire, no nested desktop: the inner teal desktop, icons,
+   taskbar, and window titlebar go away. Softie's own window provides
+   the frame. Keeps the Game/Options/Help menubar, the felt, and the
+   score/time status bar. Standalone play is untouched. */
+html.embedded body{background:#0a7b36}
+html.embedded #desktop{padding:0;display:block;width:100%;height:100%}
+html.embedded .desktop-surface,
+html.embedded .desktop-icons,
+html.embedded .taskbar{display:none}
+html.embedded .window{left:0;top:0;width:100%;height:100%;min-height:0;border:0;border-radius:0;box-shadow:none}
+html.embedded .titlebar{display:none}
+html.embedded .menubar{border-top:0}
+html.embedded .board{top:24px;bottom:20px}
+html.embedded .modal-backdrop{inset:24px 0 20px}
+@media (max-width:900px){
+  html.embedded .window{left:0;top:0;width:100%;height:100%}
+}
 </style>
 </head>
 <body>
@@ -496,6 +515,12 @@ body:before{display:none;}
 <div class="drag-layer" id="dragLayer"></div>
 <script>
 (() => {
+  // Embedded inside Softie: one card table, no nested desktop/titlebar.
+  try {
+    if (new URLSearchParams(location.search).get('embedded') === '1') {
+      document.documentElement.classList.add('embedded');
+    }
+  } catch {}
   const SUITS = ["spades","hearts","diamonds","clubs"];
   const SYMBOL = {spades:"♠",hearts:"♥",diamonds:"♦",clubs:"♣"};
   const RED = new Set(["hearts","diamonds"]);
