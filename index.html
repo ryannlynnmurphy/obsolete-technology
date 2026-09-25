@@ -147,15 +147,24 @@ function buildCRT(){
   add(new THREE.Mesh(new RoundedBoxGeometry(1.45,.85,1.25,6,.18),plastic),0,-2.55,-.1);
   add(new THREE.Mesh(new RoundedBoxGeometry(3.7,.42,2.6,8,.18),plastic),0,-3.08,.05);
 
-  const S = {power:true, bootT:0, ready:false, pdfOpen:false, pdfScroll:0, menuOpen:false, gameOpen:false};
+  const S = {power:true, bootT:0, ready:false, pdfOpen:false, pdfScroll:0, menuOpen:false, gameOpen:false,
+    cursor:{x:320,y:240}, cursorActive:false};
   const FILE_HIT = {x:262,y:180,w:116,h:130};
   const SOL_HIT = {x:496,y:180,w:120,h:130};
   const BEGIN_HIT = {x:4,y:446,w:90,h:30};
   const MENU = {x:4,y:356,w:172,h:90};
   function drawScreen(t){
     const W=640,H=480;
+    const arrow=()=>{
+      if(!S.cursorActive) return;
+      const cx=S.cursor.x, cy=S.cursor.y;
+      g.fillStyle="#fff";g.strokeStyle="#000";g.lineWidth=2;
+      g.beginPath();g.moveTo(cx,cy);g.lineTo(cx,cy+17);g.lineTo(cx+5,cy+13);
+      g.lineTo(cx+7,cy+18);g.lineTo(cx+9,cy+16);g.lineTo(cx+7,cy+11);
+      g.lineTo(cx+12,cy+11);g.closePath();g.fill();g.stroke();
+    };
     g.fillStyle="#0b0b0c";g.fillRect(0,0,W,H);
-    if(!S.power){scrTex.needsUpdate=true;return;}
+    if(!S.power){arrow();scrTex.needsUpdate=true;return;}
     /* retro desktop: teal field, gray taskbar, green begin button.
        Unbranded, but you know what it misses. */
     const desk=g.createLinearGradient(0,0,0,H);
@@ -165,6 +174,7 @@ function buildCRT(){
       g.fillStyle="rgba(255,255,255,.75)";g.font="14px Tahoma,system-ui,sans-serif";
       g.textBaseline="alphabetic";
       g.fillText("please wait…",W/2-44,H/2);
+      arrow();
       scrTex.needsUpdate=true;return;
     }
     g.textBaseline="alphabetic";
@@ -264,6 +274,8 @@ function buildCRT(){
       g.fillStyle="#808080";g.fillRect(MENU.x+4,MENU.y+44,MENU.w-8,1);
       g.fillText("shut down",MENU.x+12,MENU.y+72);
     }
+    /* in-screen arrow: the system cursor hides while inside */
+    arrow();
     scrTex.needsUpdate=true;
   }
   function clickOS(px,py){
@@ -1016,6 +1028,7 @@ function enterFocus(name){
   renderer.domElement.style.cursor = "none";
   let mesh, w, h;
   if(name==="crt"){ mesh=crt.display; w=crt.screenW*CRT_S; h=crt.screenH*CRT_S;
+    crt.S.cursorActive = true;
     if(!crt.S.power){ crt.togglePower(); } }
   if(name==="laptop"){ mesh=lap.display; w=lap.screenW*LAP_S; h=lap.screenH*LAP_S;
     lap.cursorActive = true; }
@@ -1033,6 +1046,7 @@ function exitFocus(){
   falling.setFrozen("crt", false);
   falling.setFrozen("laptop", false);
   falling.setFrozen("tv", false);
+  if(focused==="crt"){ crt.S.cursorActive = false; }
   if(focused==="laptop"){ lap.cursorActive = false; lap.winDragging = false; }
   focused = null;
   exitBtn.classList.remove("show");
@@ -1076,6 +1090,16 @@ renderer.domElement.addEventListener("pointerdown", (e)=>{
   if(scr){ downInfo = {x:e.clientX, y:e.clientY, kind:"focus", screen:scr}; return; }
 });
 renderer.domElement.addEventListener("pointermove", (e)=>{
+  if(focused === "crt"){
+    /* drive the CRT arrow from the real pointer via screen UV */
+    setPtr(e); _ray.setFromCamera(_ptr, camera);
+    const hit = _ray.intersectObject(crt.display, false)[0];
+    if(hit && hit.uv){
+      crt.S.cursor.x = THREE.MathUtils.clamp(hit.uv.x*640, 0, 640);
+      crt.S.cursor.y = THREE.MathUtils.clamp((1-hit.uv.y)*480, 0, 480);
+    }
+    return;
+  }
   if(focused === "laptop"){
     /* drive the virtual cursor from the real pointer via screen UV */
     setPtr(e); _ray.setFromCamera(_ptr, camera);
