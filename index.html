@@ -147,17 +147,159 @@ function buildCRT(){
   add(new THREE.Mesh(new RoundedBoxGeometry(1.45,.85,1.25,6,.18),plastic),0,-2.55,-.1);
   add(new THREE.Mesh(new RoundedBoxGeometry(3.7,.42,2.6,8,.18),plastic),0,-3.08,.05);
 
-  /* The screen belongs to solitaire-win2000.html now — this canvas
-     is just dark glass behind the overlay. */
-  const S = {power:true};
+  /* Below the game overlay sits a working retro desktop: teal field,
+     taskbar with begin menu, rx.pdf reader, trash. The solitaire
+     icon reopens the game after it is closed. */
+  const S = {power:true, bootT:0, ready:false, pdfOpen:false, pdfScroll:0, menuOpen:false, gameOpen:true,
+    cursor:{x:320,y:240}, cursorActive:false};
+  const FILE_HIT = {x:262,y:180,w:116,h:130};
+  const SOL_HIT = {x:496,y:180,w:120,h:130};
+  const BEGIN_HIT = {x:4,y:446,w:90,h:30};
+  const MENU = {x:4,y:356,w:172,h:90};
   function drawScreen(t){
     const W=640,H=480;
+    const arrow=()=>{
+      if(!S.cursorActive) return;
+      const cx=S.cursor.x, cy=S.cursor.y;
+      g.fillStyle="#fff";g.strokeStyle="#000";g.lineWidth=2;
+      g.beginPath();g.moveTo(cx,cy);g.lineTo(cx,cy+17);g.lineTo(cx+5,cy+13);
+      g.lineTo(cx+7,cy+18);g.lineTo(cx+9,cy+16);g.lineTo(cx+7,cy+11);
+      g.lineTo(cx+12,cy+11);g.closePath();g.fill();g.stroke();
+    };
     g.fillStyle="#0b0b0c";g.fillRect(0,0,W,H);
+    if(!S.power){arrow();scrTex.needsUpdate=true;return;}
+    const desk=g.createLinearGradient(0,0,0,H);
+    desk.addColorStop(0,"#0e8282");desk.addColorStop(1,"#075e5e");
+    g.fillStyle=desk;g.fillRect(0,0,W,H);
+    if(!S.ready){
+      g.fillStyle="rgba(255,255,255,.75)";g.font="14px Tahoma,system-ui,sans-serif";
+      g.textBaseline="alphabetic";
+      g.fillText("please wait…",W/2-44,H/2);
+      arrow();
+      scrTex.needsUpdate=true;return;
+    }
+    g.textBaseline="alphabetic";
+    /* desktop icon: rx.pdf file */
+    const fx=298,fy=198;
+    g.fillStyle="#f4f4f0";
+    g.beginPath();
+    g.moveTo(fx,fy);g.lineTo(fx+32,fy);g.lineTo(fx+44,fy+12);g.lineTo(fx+44,fy+56);
+    g.lineTo(fx,fy+56);g.closePath();g.fill();
+    g.fillStyle="#c9c9c4";
+    g.beginPath();
+    g.moveTo(fx+32,fy);g.lineTo(fx+32,fy+12);g.lineTo(fx+44,fy+12);g.closePath();g.fill();
+    g.fillStyle="#a33d3d";g.fillRect(fx,fy+34,44,13);
+    g.fillStyle="#fff";g.font="bold 10px Tahoma,system-ui,sans-serif";
+    g.fillText("PDF",fx+11,fy+44);
+    g.fillStyle="#fff";g.font="12px Tahoma,system-ui,sans-serif";
+    g.fillText("rx.pdf",fx-1,fy+72);
+    /* trash icon, decorative */
+    g.fillStyle="#c9c9c4";g.fillRect(48,204,28,30);
+    g.fillStyle="#8f8f8a";g.fillRect(48,204,28,5);
+    g.fillStyle="#fff";g.font="12px Tahoma,system-ui,sans-serif";
+    g.fillText("trash",46,246);
+    /* solitaire icon: green felt + white card, reopens the game */
+    g.fillStyle="#0d4f2a";g.fillRect(516,198,52,44);
+    g.strokeStyle="rgba(255,255,255,.5)";g.lineWidth=1;
+    g.strokeRect(516.5,198.5,51,43);
+    g.fillStyle="#f4f4f0";g.fillRect(528,204,28,32);
+    g.fillStyle="#a33d3d";g.font="bold 16px Georgia,serif";
+    g.fillText("A",534,228);
+    g.fillStyle="#fff";g.font="12px Tahoma,system-ui,sans-serif";
+    g.fillText("solitaire",508,258);
+    if(S.pdfOpen){
+      const px=170,py=44,pw=300,ph=392;
+      g.fillStyle="#d4d0c8";g.fillRect(px-3,py-3,pw+6,ph+6);
+      const tb=g.createLinearGradient(px,0,px+pw,0);
+      tb.addColorStop(0,"#000080");tb.addColorStop(1,"#1084d0");
+      g.fillStyle=tb;g.fillRect(px,py,pw,28);
+      g.fillStyle="#fff";g.font="bold 14px Tahoma,system-ui,sans-serif";
+      g.fillText("rx.pdf — reader",px+8,py+20);
+      g.fillStyle="#d4d0c8";g.fillRect(426,48,44,36);
+      g.fillStyle="#fff";g.fillRect(426,48,44,2);
+      g.fillStyle="#808080";g.fillRect(426,82,44,2);
+      g.fillStyle="#404040";g.font="bold 18px Tahoma,system-ui,sans-serif";
+      g.fillText("×",442,76);
+      g.fillStyle="#d4d0c8";g.fillRect(px,py+28,pw,20);
+      g.fillStyle="#222";g.font="12px Tahoma,system-ui,sans-serif";
+      g.fillText("File   Edit   View",px+8,py+43);
+      g.fillStyle="#fff";g.fillRect(px,py+48,pw,ph-48);
+      g.save();g.beginPath();g.rect(px,py+48,pw,ph-48);g.clip();
+      g.translate(0,-S.pdfScroll);
+      g.fillStyle="#1a1a1c";g.font="600 24px Georgia,serif";
+      g.fillText("rx",px+32,py+108);
+      g.fillStyle="#c9c5bb";g.fillRect(px+32,py+124,pw-64,1);
+      g.fillStyle="#55555a";g.font="15px Georgia,serif";
+      g.fillText("This file is intentionally quiet.",px+32,py+168);
+      g.fillText("There is nothing else",px+32,py+194);
+      g.fillText("on this computer.",px+32,py+220);
+      g.fillStyle="#c4c0b5";
+      for(let i=0;i<4;i++)g.fillRect(px+32,py+248+i*24,pw-64-((i*53)%120),8);
+      g.fillStyle="#55555a";g.font="13px system-ui,sans-serif";
+      g.fillText("— end of file —",px+32,py+378);
+      g.restore();
+    }
+    /* taskbar */
+    g.fillStyle="#d4d0c8";g.fillRect(0,H-34,W,34);
+    g.fillStyle="#ffffff";g.fillRect(0,H-34,W,2);
+    const bg=g.createLinearGradient(0,H-30,0,H-4);
+    bg.addColorStop(0,"#3f9e4d");bg.addColorStop(1,"#2c7a38");
+    g.fillStyle=bg;g.fillRect(4,H-30,90,26);
+    g.fillStyle="#fff";g.font="bold 15px Tahoma,system-ui,sans-serif";
+    g.fillText("begin",22,H-11);
+    g.fillStyle="#e8e8e8";g.fillRect(10,H-25,14,14);
+    g.fillStyle="#3f9e4d";g.fillRect(12,H-23,10,4);
+    g.fillStyle="#d4a017";g.fillRect(12,H-18,10,4);
+    if(S.pdfOpen){
+      g.fillStyle="#b8b4ac";g.fillRect(100,H-30,180,26);
+      g.fillStyle="#222";g.font="12px Tahoma,system-ui,sans-serif";
+      g.fillText("rx.pdf — reader",108,H-12);
+    }
+    if(S.gameOpen){
+      g.fillStyle="#b8b4ac";g.fillRect(286,H-30,180,26);
+      g.fillStyle="#222";g.font="12px Tahoma,system-ui,sans-serif";
+      g.fillText("solitaire",294,H-12);
+    }
+    g.fillStyle="#b8b4ac";g.fillRect(W-92,H-30,88,26);
+    g.fillStyle="#222";g.font="12px Tahoma,system-ui,sans-serif";
+    g.fillText(new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),W-80,H-12);
+    if(S.menuOpen){
+      g.fillStyle="#d4d0c8";g.fillRect(MENU.x,MENU.y,MENU.w,MENU.h);
+      g.fillStyle="#fff";g.fillRect(MENU.x,MENU.y,MENU.w,2);
+      g.fillStyle="#222";g.font="13px Tahoma,system-ui,sans-serif";
+      g.fillText("reader",MENU.x+12,MENU.y+26);
+      g.fillStyle="#808080";g.fillRect(MENU.x+4,MENU.y+44,MENU.w-8,1);
+      g.fillText("shut down",MENU.x+12,MENU.y+72);
+    }
+    arrow();
     scrTex.needsUpdate=true;
   }
-  function clickOS(px,py){ /* handled by the overlay page itself */ }
+  function clickOS(px,py){
+    if(!S.ready||!S.power) return;
+    const inBegin=px>BEGIN_HIT.x&&px<BEGIN_HIT.x+BEGIN_HIT.w&&py>BEGIN_HIT.y&&py<BEGIN_HIT.y+BEGIN_HIT.h;
+    if(S.menuOpen){
+      if(px>MENU.x+4&&px<MENU.x+MENU.w-4&&py>MENU.y+4&&py<MENU.y+40){
+        S.menuOpen=false;S.pdfOpen=true;S.pdfScroll=0;S.gameOpen=false;return;
+      }
+      if(px>MENU.x+4&&px<MENU.x+MENU.w-4&&py>MENU.y+48&&py<MENU.y+82){
+        S.menuOpen=false;togglePower();return;
+      }
+      S.menuOpen=false;
+      if(inBegin) return;
+    }else if(inBegin){ S.menuOpen=true; return; }
+    if(S.pdfOpen){
+      if(px>426&&px<470&&py>44&&py<88){S.pdfOpen=false;S.pdfScroll=0;}
+      return;
+    }
+    if(px>SOL_HIT.x&&px<SOL_HIT.x+SOL_HIT.w&&py>SOL_HIT.y&&py<SOL_HIT.y+SOL_HIT.h){
+      S.pdfOpen=false;S.pdfScroll=0;S.menuOpen=false;S.gameOpen=true;return;
+    }
+    if(px>FILE_HIT.x&&px<FILE_HIT.x+FILE_HIT.w&&py>FILE_HIT.y&&py<FILE_HIT.y+FILE_HIT.h){
+      S.pdfOpen=true;S.pdfScroll=0;S.gameOpen=false;
+    }
+  }
   function togglePower(){
-    S.power=!S.power;
+    S.power=!S.power; S.bootT=0; S.ready=false; S.pdfOpen=false; S.pdfScroll=0; S.menuOpen=false;
     led.material=S.power?ledOn:ledOff;
     powerButton.position.z-= .06; setTimeout(()=>powerButton.position.z+=.06,120);
   }
@@ -748,6 +890,14 @@ gameFrame.style.height = "480px";
 gameFrame.style.border = "0";
 gameFrame.style.display = "block";
 gameDiv.appendChild(gameFrame);
+const gameClose = document.createElement("button");
+gameClose.textContent = "×";
+gameClose.setAttribute("aria-label", "close solitaire");
+gameClose.style.cssText = "position:absolute;top:6px;right:8px;width:26px;height:24px;" +
+  "border:1px solid #6f7f8c;border-radius:3px;cursor:pointer;" +
+  "background:linear-gradient(#ffffff,#d9e2ea);color:#111;font:14px/1 Tahoma,sans-serif;";
+gameClose.addEventListener("click", ()=>{ crt.S.gameOpen = false; });
+gameDiv.appendChild(gameClose);
 const gameObj = new CSS3DObject(gameDiv);
 gameObj.scale.set(3.5/640, 2.45/480, 1);
 gameObj.position.set(-0.18, 0.25, 1.826);
@@ -874,6 +1024,7 @@ function enterFocus(name){
   renderer.domElement.style.cursor = "none";
   let mesh, w, h;
   if(name==="crt"){ mesh=crt.display; w=crt.screenW*CRT_S; h=crt.screenH*CRT_S;
+    crt.S.cursorActive = true;
     if(!crt.S.power){ crt.togglePower(); } }
   if(name==="laptop"){ mesh=lap.display; w=lap.screenW*LAP_S; h=lap.screenH*LAP_S;
     lap.cursorActive = true; }
@@ -891,6 +1042,7 @@ function exitFocus(){
   falling.setFrozen("crt", false);
   falling.setFrozen("laptop", false);
   falling.setFrozen("tv", false);
+  if(focused==="crt"){ crt.S.cursorActive = false; }
   if(focused==="laptop"){ lap.cursorActive = false; lap.winDragging = false; }
   focused = null;
   exitBtn.classList.remove("show");
@@ -939,6 +1091,16 @@ renderer.domElement.addEventListener("pointerdown", (e)=>{
   }
 });
 renderer.domElement.addEventListener("pointermove", (e)=>{
+  if(focused === "crt"){
+    /* drive the CRT arrow from the real pointer via screen UV */
+    setPtr(e); _ray.setFromCamera(_ptr, camera);
+    const hit = _ray.intersectObject(crt.display, false)[0];
+    if(hit && hit.uv){
+      crt.S.cursor.x = THREE.MathUtils.clamp(hit.uv.x*640, 0, 640);
+      crt.S.cursor.y = THREE.MathUtils.clamp((1-hit.uv.y)*480, 0, 480);
+    }
+    return;
+  }
   if(focused === "laptop"){
     /* drive the virtual cursor from the real pointer via screen UV */
     setPtr(e); _ray.setFromCamera(_ptr, camera);
@@ -961,7 +1123,8 @@ renderer.domElement.addEventListener("pointerup", (e)=>{
     if(focused === "crt"){
       setPtr(e); _ray.setFromCamera(_ptr, camera);
       if(_ray.intersectObject(crt.powerButton, false).length){ crt.togglePower(); return; }
-      if(!crt.S.power){ crt.togglePower(); return; }
+      const dh = _ray.intersectObject(crt.display, false)[0];
+      if(dh && dh.uv) crt.clickOS(Math.floor(dh.uv.x*640), Math.floor((1-dh.uv.y)*480));
     }else if(focused === "laptop"){
       const c = lap.cursor;
       if(lap.windowOpen){
@@ -988,7 +1151,10 @@ renderer.domElement.addEventListener("pointercancel", (e)=>{
   lap.winDragging = false;
 });
 renderer.domElement.addEventListener("wheel", (e)=>{
-  if(focused === "laptop" && lap.windowOpen){
+  if(focused === "crt" && crt.S.pdfOpen){
+    crt.S.pdfScroll = THREE.MathUtils.clamp(crt.S.pdfScroll + e.deltaY*.3, 0, 80);
+    e.preventDefault();
+  }else if(focused === "laptop" && lap.windowOpen){
     lap.scrollPdf(e.deltaY*.6);
     e.preventDefault();
   }
@@ -1027,7 +1193,9 @@ function animate(){
      Canvas redraws run at half rate — the texture uploads are the
      most expensive per-frame work here, and 30Hz is invisible. */
   uiTick++;
+  if(crt.S.power && !crt.S.ready){ crt.S.bootT += dt; if(crt.S.bootT > 1) crt.S.ready = true; }
   if(uiTick % 2 === 0){
+    if(!crt.S.gameOpen) crt.drawScreen(t);
     lap.drawOS();
   }
   lap.updateKeys();
@@ -1037,12 +1205,12 @@ function animate(){
     tvd.screenMat.emissiveIntensity = 1.2 + Math.sin(performance.now()*0.016)*0.035;
   }
 
-  /* the CRT belongs to the game page: overlay on while powered,
-     canvas display stays dark glass behind it.
-     Click-through until focused, playable once inside. */
-  gameObj.visible = crt.S.power;
-  gameDiv.style.pointerEvents = (focused === "crt") ? "auto" : "none";
-  crt.display.visible = false;
+  /* the CRT belongs to the game page while it is open; closing it
+     reveals the working desktop underneath. Canvas display stays
+     dark glass behind the overlay. */
+  gameObj.visible = crt.S.power && crt.S.gameOpen;
+  gameDiv.style.pointerEvents = (focused === "crt" && crt.S.gameOpen) ? "auto" : "none";
+  crt.display.visible = crt.S.power && !crt.S.gameOpen;
 
   renderer.render(scene, camera);
   cssRenderer.render(scene, camera);
