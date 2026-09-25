@@ -5,14 +5,12 @@ forever through an empty void in deep slow motion. Click any screen to
 step inside and use it. ESC steps back out.
 
 - `index.html` — the three devices, their working screens, staging, camera.
-  The CRT runs `solitaire-win2000.html` fullscreen as a live overlay page.
-  Its × closes down to a working retro desktop (begin menu, rx.pdf
-  reader, trash); the solitaire icon reopens the game. Click anywhere
-  on the monitor to step in and play.
+  The CRT runs `solitaire-win2000.html` fullscreen as a live overlay page;
+  click anywhere on the monitor to step in and play it.
 - `FallingDevices.js` — the Rapier physics controller (staged slow-fall,
   screen-focus freeze, invisible top/bottom wrap).
-- `solitaire-win2000.html` — a complete Klondike game, always on while
-  the monitor has power.
+- `solitaire-win2000.html` — a complete Klondike game that runs live on
+  the CRT, always on while the monitor has power.
 
 Run it with any static server (ES modules + CDN imports require http):
 
