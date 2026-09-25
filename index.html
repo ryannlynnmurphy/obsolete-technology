@@ -881,11 +881,16 @@ function enterFocus(name){
     if(!tvd.powered){ tvd.togglePower(); } }
   const pose = computeFocusPose(mesh, w, h);
   tweenCamTo(pose.pos, pose.tgt, 1.4, ()=>{});
-  falling.setFrozen(name, true);
+  /* freeze the whole scene mid-air, not just this machine */
+  falling.setFrozen("crt", true);
+  falling.setFrozen("laptop", true);
+  falling.setFrozen("tv", true);
 }
 function exitFocus(){
   if(!focused) return;
-  falling.setFrozen(focused, false);
+  falling.setFrozen("crt", false);
+  falling.setFrozen("laptop", false);
+  falling.setFrozen("tv", false);
   if(focused==="laptop"){ lap.cursorActive = false; lap.winDragging = false; }
   focused = null;
   exitBtn.classList.remove("show");
