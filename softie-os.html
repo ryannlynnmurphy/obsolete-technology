@@ -1,0 +1,705 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>Softie</title>
+<style>
+  :root{
+    --silver:#d4d0c8;
+    --silver-hi:#ffffff;
+    --silver-mid:#808080;
+    --silver-dark:#404040;
+    --blue:#0a246a;
+    --blue-2:#3a6ea5;
+    --desktop:#3a78ad;
+    --task-h:32px;
+    --font:Tahoma,"MS Sans Serif",Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000;font-family:var(--font);font-size:12px}
+  button{font:inherit}
+  #os{position:fixed;inset:0;background:linear-gradient(135deg,#3d82bc,#2f6799);overflow:hidden;user-select:none;color:#111}
+  #os::before{content:"";position:absolute;inset:0;pointer-events:none;z-index:99990;background:repeating-linear-gradient(0deg,rgba(255,255,255,.018) 0 1px,rgba(0,0,0,.014) 1px 2px);mix-blend-mode:overlay}
+  #watermark{position:absolute;top:22px;left:50%;transform:translateX(-50%);font-size:10px;letter-spacing:.42em;color:rgba(255,255,255,.18);white-space:nowrap;text-transform:uppercase;pointer-events:none}
+
+  /* desktop icons */
+  #desktop{position:absolute;inset:0 0 var(--task-h) 0;padding:13px 12px;overflow:hidden}
+  .desktop-icon{position:absolute;width:84px;min-height:78px;padding:5px 4px;text-align:center;color:#fff;text-shadow:1px 1px 1px rgba(0,0,0,.9);cursor:default;border:1px solid transparent;outline:0;touch-action:none}
+  .desktop-icon:hover{background:rgba(255,255,255,.08)}
+  .desktop-icon.selected{background:rgba(10,36,106,.35);border:1px dotted rgba(255,255,255,.78)}
+  .desktop-icon.dragging{background:rgba(10,36,106,.24);border:1px dotted rgba(255,255,255,.55);z-index:15}
+  .desktop-icon .glyph{width:44px;height:44px;margin:0 auto 5px;display:grid;place-items:center;filter:drop-shadow(1px 2px 0 rgba(0,0,0,.28));font-size:32px;line-height:1}
+  .desktop-icon .label{display:inline;padding:1px 3px;line-height:1.2}
+  .desktop-icon.selected .label{background:#0a246a}
+  .pdf-glyph{position:relative;width:34px!important;height:41px!important;background:#fff;border:2px solid #222;transform:rotate(2deg)}
+  .pdf-glyph::before{content:"";position:absolute;right:-2px;top:-2px;width:11px;height:11px;background:#efefef;border-left:2px solid #222;border-bottom:2px solid #222;transform:skew(-5deg) rotate(2deg)}
+  .pdf-glyph::after{content:"PDF";position:absolute;inset:0;display:grid;place-items:center;color:#cf1e24;font:700 11px/1 Arial,sans-serif;letter-spacing:.03em}
+  .solitaire-glyph{position:relative;width:40px!important;height:40px!important}
+  .solitaire-glyph::before,.solitaire-glyph::after,.solitaire-glyph i{content:"";position:absolute;width:24px;height:31px;border:1px solid #111;background:#f7f7f3;box-shadow:1px 1px 0 rgba(0,0,0,.2)}
+  .solitaire-glyph::before{left:2px;top:6px;transform:rotate(-13deg);background:repeating-linear-gradient(45deg,#25589d 0 2px,#5a82b8 2px 4px)}
+  .solitaire-glyph i{left:9px;top:3px;transform:rotate(6deg);background:repeating-linear-gradient(45deg,#25589d 0 2px,#5a82b8 2px 4px)}
+  .solitaire-glyph::after{left:13px;top:8px;transform:rotate(9deg);content:"♠";display:grid;place-items:center;color:#111;font:18px Georgia,serif;background:#fff}
+  .trash-glyph{position:relative;width:32px!important;height:36px!important;color:#d8d8d8;text-shadow:none}
+  .trash-glyph::before{content:"";position:absolute;left:7px;right:7px;top:10px;bottom:4px;border:2px solid #dadada;border-top:none;border-radius:0 0 3px 3px;background:linear-gradient(#96b6db,#5f87b5)}
+  .trash-glyph::after{content:"";position:absolute;left:6px;right:6px;top:6px;height:5px;border:2px solid #dadada;border-bottom:none;border-radius:2px 2px 0 0;background:#2f5d8a;box-shadow:10px 8px 0 -7px rgba(255,255,255,.5),0 11px 0 -8px rgba(255,255,255,.4)}
+  .paint-glyph{position:relative;width:42px!important;height:42px!important;background:#ece9df;border:1px solid #333;transform:rotate(-3deg)}
+  .paint-glyph::before{content:"";position:absolute;left:7px;top:7px;width:8px;height:8px;border-radius:50%;background:#e84b4b;box-shadow:13px 2px 0 #e2b84d,6px 15px 0 #5aa56c,20px 17px 0 #557fc5}
+  .paint-glyph::after{content:"↗";position:absolute;right:1px;bottom:-4px;font:bold 27px/1 Georgia,serif;color:#222;transform:rotate(-18deg);text-shadow:none}
+
+  /* taskbar */
+  #taskbar{position:absolute;left:0;right:0;bottom:0;height:var(--task-h);background:var(--silver);border-top:1px solid #fff;box-shadow:0 -1px 0 #808080;display:flex;align-items:center;padding:2px 3px;z-index:90000}
+  .bevel{border:1px solid #fff;border-right-color:#404040;border-bottom-color:#404040;background:var(--silver);box-shadow:1px 1px 0 #808080 inset}
+  .bevel:active,.bevel.pressed{border-color:#404040 #fff #fff #404040;box-shadow:1px 1px 0 #808080 inset}
+  #startBtn{height:27px;min-width:96px;padding:0 10px 0 8px;display:flex;align-items:center;gap:7px;font-weight:600;letter-spacing:.03em}
+  #startLogo{width:18px;height:18px;position:relative;display:block;background:linear-gradient(135deg,#9ec5ea,#3c6d9e);clip-path:polygon(50% 0%,100% 50%,50% 100%,0% 50%);border:1px solid rgba(0,0,0,.32);box-shadow:0 0 0 1px rgba(255,255,255,.35) inset}
+  #startLogo::after{content:"";position:absolute;inset:4px;background:rgba(255,255,255,.55);clip-path:inherit}
+  #taskButtons{display:flex;align-items:center;gap:3px;flex:1;min-width:0;margin-left:5px;overflow:hidden}
+  .task-btn{height:25px;min-width:120px;max-width:190px;display:flex;align-items:center;gap:5px;padding:0 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left}
+  .task-btn.active{font-weight:700;border-color:#404040 #fff #fff #404040;background:#c8c5be}
+  #tray{height:25px;min-width:92px;padding:0 8px;border:1px solid #808080;border-right-color:#fff;border-bottom-color:#fff;display:flex;align-items:center;justify-content:flex-end;gap:7px;background:#cbc8c0}
+  #clock{font-size:11px;white-space:nowrap}
+  .tray-dot{width:8px;height:8px;border-radius:50%;background:#2d8b45;box-shadow:0 0 0 1px #155527 inset}
+  #busyGlyph{display:none;width:13px;height:13px;border:1px solid #173d71;background:#dce8f5;position:relative;box-shadow:1px 1px 0 #fff inset,-1px -1px 0 #6c85a2 inset}
+  #busyGlyph::before{content:"";position:absolute;width:4px;height:4px;left:2px;top:2px;background:#2c65a2;box-shadow:5px 0 0 #8fb2d8,5px 5px 0 #2c65a2,0 5px 0 #8fb2d8}
+  #os.busy #busyGlyph{display:block;animation:busyBlink .34s steps(1,end) infinite}
+  @keyframes busyBlink{0%,49%{filter:none}50%,100%{filter:contrast(1.35) brightness(.86)}}
+  #os.busy, #os.busy *{cursor:wait!important}
+  #os.busy .tray-dot{background:#3c77b6;box-shadow:0 0 0 1px #1c4d7f inset}
+
+  /* start menu */
+  #startMenu{position:absolute;left:3px;bottom:31px;width:238px;height:298px;background:var(--silver);border:2px solid #fff;border-right-color:#202020;border-bottom-color:#202020;z-index:91000;display:none;box-shadow:2px 2px 0 rgba(0,0,0,.35)}
+  #startMenu.open{display:flex}
+  .start-rail{width:29px;background:linear-gradient(#7b7b7b,#444);color:#dcdcdc;writing-mode:vertical-rl;transform:rotate(180deg);font-size:17px;font-weight:700;letter-spacing:.03em;padding:8px 4px}
+  .start-items{flex:1;padding:4px 2px}
+  .start-item{height:38px;display:flex;align-items:center;gap:10px;padding:0 9px;position:relative;cursor:default}
+  .start-item:hover{background:#0a246a;color:#fff}
+  .start-item .smallicon{width:24px;text-align:center;font-size:19px}
+  .start-item .arrow{margin-left:auto}
+  .start-sep{height:2px;border-top:1px solid #808080;border-bottom:1px solid #fff;margin:4px 4px}
+  .submenu{position:absolute;left:202px;top:-3px;width:174px;background:var(--silver);border:2px solid #fff;border-right-color:#202020;border-bottom-color:#202020;padding:3px;display:none;color:#111;box-shadow:2px 2px 0 rgba(0,0,0,.2)}
+  .start-item:hover>.submenu{display:block}
+  .subitem{height:31px;padding:0 8px;display:flex;align-items:center;gap:7px}
+  .subitem:hover{background:#0a246a;color:#fff}
+
+  /* windows */
+  #windowLayer{position:absolute;inset:0 0 var(--task-h) 0;pointer-events:none}
+  .os-window{position:absolute;min-width:260px;min-height:150px;background:var(--silver);border:2px solid #fff;border-right-color:#202020;border-bottom-color:#202020;box-shadow:2px 3px 0 rgba(0,0,0,.24);pointer-events:auto;display:flex;flex-direction:column;overflow:hidden}
+  .os-window.inactive .titlebar{background:#7f7f7f}
+  .titlebar{height:27px;flex:0 0 27px;background:linear-gradient(90deg,var(--blue),var(--blue-2));color:#fff;display:flex;align-items:center;padding:2px 3px 2px 5px;font-weight:700;cursor:default;touch-action:none}
+  .title-icon{width:16px;height:16px;margin-right:5px;display:grid;place-items:center;font-size:12px}
+  .title-text{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .win-controls{margin-left:auto;height:21px;display:flex;gap:2px}
+  .win-btn{width:23px;height:21px;padding:0;display:grid;place-items:center;font:bold 12px Arial;line-height:1}
+  .window-body{position:relative;flex:1;min-height:0;background:#fff;overflow:hidden}
+  .window-body iframe{width:100%;height:100%;border:0;display:block;background:#d4d0c8}
+  .resize-handle{position:absolute;right:0;bottom:0;width:14px;height:14px;cursor:nwse-resize;background:linear-gradient(135deg,transparent 0 45%,#808080 46% 53%,transparent 54% 62%,#808080 63% 70%,transparent 71%);z-index:4}
+
+  /* rx.pdf */
+  .pdf-app{height:100%;display:flex;flex-direction:column;background:#777}
+  .app-menu{height:25px;flex:0 0 25px;background:var(--silver);border-bottom:1px solid #808080;padding:0 5px;display:flex;align-items:center;gap:10px;font-size:11px}
+  .pdf-toolbar{height:32px;flex:0 0 32px;background:#e5e3de;border-bottom:1px solid #777;display:flex;align-items:center;padding:3px 6px;gap:4px}
+  .toolbtn{height:24px;min-width:27px;padding:1px 5px;background:var(--silver)}
+  .pdf-stage{flex:1;overflow:auto;padding:20px;background:#747474;display:flex;justify-content:center;align-items:flex-start}
+  .pdf-page{width:min(560px,calc(100% - 24px));aspect-ratio:8.5/11;background:#f9f8f1;box-shadow:3px 4px 10px rgba(0,0,0,.38);padding:42px 48px;color:#121212;font-family:"Times New Roman",serif;user-select:text}
+  .rx-mark{font-family:Arial,sans-serif;font-size:58px;font-weight:800;letter-spacing:-.08em;line-height:.8}
+  .rx-rule{height:5px;background:#111;margin:12px 0 16px}
+  .pdf-page h1{margin:0 0 3px;font-size:25px;font-weight:500}
+  .pdf-page .meta{font:11px Arial,sans-serif;text-transform:uppercase;letter-spacing:.15em;margin-bottom:26px}
+  .pdf-page p{font-size:13px;line-height:1.5;margin:0 0 12px}
+  .pdf-page .small{font-size:11px;color:#555;margin-top:35px}
+
+
+  /* shutdown */
+  #powerLayer{position:absolute;inset:0;background:#050505;z-index:120000;display:none;place-items:center;color:#d8d8d8}
+  #powerLayer.show{display:grid;animation:powerDown .58s ease forwards}
+  #powerLayer.off{display:grid;opacity:1}
+  #powerMessage{font:12px var(--font);opacity:.62;margin-top:70px}
+  #powerDot{position:absolute;width:100%;height:2px;background:#fff;box-shadow:0 0 18px 5px rgba(255,255,255,.75);animation:crtCollapse .55s ease forwards}
+  @keyframes crtCollapse{0%{width:100%;height:100%;opacity:.18}55%{width:100%;height:2px;opacity:1}85%{width:5px;height:5px;border-radius:50%;opacity:1}100%{width:1px;height:1px;opacity:0}}
+  #bootBtn{display:none;margin-top:20px;color:#bdbdbd;background:transparent;border:1px solid #555;padding:7px 13px}
+  #powerLayer.off #powerDot{display:none}
+  #powerLayer.off #bootBtn{display:block}
+  #powerLayer.off #powerMessage{margin-top:0}
+
+  /* entry hint shown only when embedded in sculpture */
+  #escHint{position:absolute;left:50%;bottom:45px;transform:translateX(-50%);z-index:95000;background:#ececec;color:#222;border-radius:18px;padding:7px 15px;font-size:11px;box-shadow:0 1px 4px rgba(0,0,0,.18);display:none;pointer-events:none}
+  html.sculpture #escHint{display:block}
+
+  @media (max-width:720px){
+    :root{--task-h:30px}
+    .desktop-icon{transform:scale(.9);transform-origin:top left}
+    .task-btn{min-width:85px}
+    #tray{min-width:76px}
+    .pdf-page{padding:28px 30px}
+  }
+</style>
+</head>
+<body>
+<div id="os" tabindex="0" aria-label="Softie operating system desktop">
+  <div id="watermark">obsolete technology</div>
+  <div id="desktop" aria-label="Desktop">
+    <button class="desktop-icon" data-app="trash" style="left:13px;top:11px" aria-label="Open Trash">
+      <span class="glyph trash-glyph"></span><span class="label">Trash</span>
+    </button>
+    <button class="desktop-icon" data-app="rx" style="left:13px;top:98px" aria-label="Open rx.pdf">
+      <span class="glyph pdf-glyph"></span><span class="label">rx.pdf</span>
+    </button>
+    <button class="desktop-icon" data-app="solitaire" style="left:13px;top:185px" aria-label="Open Solitaire">
+      <span class="glyph solitaire-glyph"><i></i></span><span class="label">Solitaire</span>
+    </button>
+    <button class="desktop-icon" data-app="paint" style="left:13px;top:272px" aria-label="Open Ryann Paint">
+      <span class="glyph paint-glyph"></span><span class="label">Ryann Paint</span>
+    </button>
+  </div>
+  <div id="windowLayer"></div>
+
+  <div id="startMenu" role="menu">
+    <div class="start-rail">Softie System</div>
+    <div class="start-items">
+      <div class="start-item"><span class="smallicon">▣</span><b>Programs</b><span class="arrow">▶</span>
+        <div class="submenu">
+          <div class="subitem" data-open="solitaire"><span>♠</span> Solitaire</div>
+          <div class="subitem" data-open="paint"><span>✎</span> Ryann Paint</div>
+        </div>
+      </div>
+      <div class="start-item"><span class="smallicon">▤</span><b>Documents</b><span class="arrow">▶</span>
+        <div class="submenu" style="top:0"><div class="subitem" data-open="rx"><span>📄</span> rx.pdf</div></div>
+      </div>
+      <div class="start-item" data-open="rx"><span class="smallicon">⌕</span> Find</div>
+      <div class="start-item"><span class="smallicon">?</span> Help</div>
+      <div class="start-sep"></div>
+      <div class="start-item" id="shutdownItem"><span class="smallicon">⏻</span><b>Shut Down...</b></div>
+    </div>
+  </div>
+
+  <div id="taskbar">
+    <button id="startBtn" class="bevel" aria-expanded="false"><span id="startLogo"></span>Softie</button>
+    <div id="taskButtons"></div>
+    <div id="tray"><span id="busyGlyph" aria-hidden="true"></span><span class="tray-dot"></span><span id="clock">--:-- --</span></div>
+  </div>
+  <div id="escHint">exit screen · esc</div>
+
+  <div id="powerLayer">
+    <div id="powerDot"></div>
+    <div id="powerMessage">It is now safe to turn off your computer.</div>
+    <button id="bootBtn">power on</button>
+  </div>
+</div>
+
+<template id="rxTemplate">
+  <div class="pdf-app">
+    <div class="app-menu">File&nbsp;&nbsp; Edit&nbsp;&nbsp; View&nbsp;&nbsp; Document&nbsp;&nbsp; Help</div>
+    <div class="pdf-toolbar"><button class="toolbtn bevel">◀</button><button class="toolbtn bevel">▶</button><button class="toolbtn bevel">100%</button><button class="toolbtn bevel">⌕</button></div>
+    <div class="pdf-stage">
+      <article class="pdf-page">
+        <div class="rx-mark">Rx</div><div class="rx-rule"></div>
+        <h1>Ryann Lynn Murphy</h1>
+        <div class="meta">writing / games / computers</div>
+        <p><b>rx.pdf</b></p>
+        <p>This is the document living on the machine. Replace this page with your actual PDF preview whenever you are ready; the surrounding viewer and window behavior are already wired.</p>
+        <p>The point of this desktop is not to simulate an entire operating system. It is to make every visible affordance believable: files open, windows move, buttons close, programs minimize, and the machine can shut down.</p>
+        <p class="small">SOFTIE DOCUMENT VIEWER · 1 page</p>
+      </article>
+    </div>
+  </div>
+</template>
+
+
+<template id="trashTemplate">
+  <div style="height:100%;background:#fff;display:flex;flex-direction:column">
+    <div class="app-menu">File&nbsp;&nbsp; Edit&nbsp;&nbsp; View&nbsp;&nbsp; Help</div>
+    <div style="flex:1;padding:18px;color:#555;font-size:11px">Recycle Bin is empty.</div>
+  </div>
+</template>
+
+<script>
+(() => {
+  const $ = (s,r=document)=>r.querySelector(s);
+  const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
+  const os = $('#os');
+  const layer = $('#windowLayer');
+  const taskButtons = $('#taskButtons');
+  const startMenu = $('#startMenu');
+  const startBtn = $('#startBtn');
+  const powerLayer = $('#powerLayer');
+  const apps = new Map();
+  let zCounter = 20;
+  let activeId = null;
+  let dragState = null;
+  let resizeState = null;
+  let iconDragState = null;
+  let suppressIconOpenUntil = 0;
+  const desktopPositionsKey = 'softie.desktop-grid.v1';
+  const GRID = { left:13, top:11, cellW:88, cellH:87 };
+
+  const qs = new URLSearchParams(location.search);
+  if (qs.get('sculpture') === '1') document.documentElement.classList.add('sculpture');
+
+  const definitions = {
+    rx: { title:'rx.pdf - Softie Document Viewer', icon:'PDF', x:115, y:58, w:650, h:540, minW:390, minH:300, template:'rxTemplate' },
+    solitaire: { title:'Solitaire', icon:'♠', x:82, y:34, w:840, h:620, minW:620, minH:480, iframe:'./solitaire-app.html?embedded=1' },
+    paint: { title:'Ryann Paint', icon:'✎', x:145, y:70, w:520, h:535, minW:470, minH:500, iframe:'./ryann-paint.html?embedded=1' },
+    trash: { title:'Recycle Bin', icon:'▱', x:255, y:135, w:420, h:310, minW:300, minH:200, template:'trashTemplate' }
+  };
+
+  function maxBounds(){
+    return { w: layer.clientWidth, h: layer.clientHeight };
+  }
+
+  function clampWindow(state){
+    const b=maxBounds();
+    state.w=Math.max(state.minW,Math.min(state.w,b.w));
+    state.h=Math.max(state.minH,Math.min(state.h,b.h));
+    state.x=Math.max(0,Math.min(state.x,Math.max(0,b.w-80)));
+    state.y=Math.max(0,Math.min(state.y,Math.max(0,b.h-32)));
+  }
+
+  function createWindow(id){
+    if(apps.has(id)) return apps.get(id);
+    const d=definitions[id];
+    if(!d) return null;
+    const state={ id, ...d, open:false, minimized:false, maximized:false, restore:null, z:++zCounter };
+    clampWindow(state);
+
+    const win=document.createElement('section');
+    win.className='os-window';
+    win.dataset.app=id;
+    win.innerHTML=`
+      <div class="titlebar" data-drag-handle>
+        <span class="title-icon">${d.icon}</span><span class="title-text"></span>
+        <div class="win-controls">
+          <button class="win-btn bevel" data-action="minimize" aria-label="Minimize">—</button>
+          <button class="win-btn bevel" data-action="maximize" aria-label="Maximize">□</button>
+          <button class="win-btn bevel" data-action="close" aria-label="Close">×</button>
+        </div>
+      </div>
+      <div class="window-body"></div>
+      <div class="resize-handle" title="Resize"></div>`;
+    $('.title-text',win).textContent=d.title;
+    const body=$('.window-body',win);
+    if(d.iframe){
+      const frame=document.createElement('iframe');
+      frame.src=d.iframe;
+      frame.title=d.title;
+      frame.allow='autoplay';
+      body.appendChild(frame);
+    }else if(d.template){
+      body.appendChild($('#'+d.template).content.cloneNode(true));
+    }
+    layer.appendChild(win);
+
+    const task=document.createElement('button');
+    task.className='task-btn bevel';
+    task.dataset.app=id;
+    task.innerHTML=`<span>${d.icon}</span><span style="overflow:hidden;text-overflow:ellipsis">${d.title}</span>`;
+    taskButtons.appendChild(task);
+
+    state.el=win; state.task=task;
+    apps.set(id,state);
+
+    win.addEventListener('pointerdown',()=>focusWindow(id));
+    $('.titlebar',win).addEventListener('dblclick',e=>{if(!e.target.closest('button')) toggleMaximize(id)});
+    $('.win-controls',win).addEventListener('click',e=>{
+      const b=e.target.closest('button'); if(!b)return;
+      e.stopPropagation();
+      const a=b.dataset.action;
+      if(a==='close') afterOldMachinePause(()=>closeWindow(id),'close');
+      if(a==='minimize') afterOldMachinePause(()=>minimizeWindow(id),'close');
+      if(a==='maximize') afterOldMachinePause(()=>toggleMaximize(id),'generic');
+    });
+    $('[data-drag-handle]',win).addEventListener('pointerdown',e=>startDrag(e,id));
+    $('.resize-handle',win).addEventListener('pointerdown',e=>startResize(e,id));
+    task.addEventListener('click',()=>{
+      const s=apps.get(id);
+      afterOldMachinePause(()=>{
+        if(s.minimized) restoreWindow(id);
+        else if(activeId===id) minimizeWindow(id);
+        else focusWindow(id);
+      },'generic');
+    });
+    applyState(state);
+    return state;
+  }
+
+  function applyState(s){
+    const e=s.el;
+    e.style.display=s.open&&!s.minimized?'flex':'none';
+    s.task.style.display=s.open?'flex':'none';
+    if(s.maximized){
+      e.style.left='0px';e.style.top='0px';e.style.width='100%';e.style.height='100%';
+      $('.resize-handle',e).style.display='none';
+    }else{
+      clampWindow(s);
+      e.style.left=s.x+'px';e.style.top=s.y+'px';e.style.width=s.w+'px';e.style.height=s.h+'px';
+      $('.resize-handle',e).style.display='block';
+    }
+    e.style.zIndex=s.z;
+    e.classList.toggle('inactive',activeId!==s.id);
+    s.task.classList.toggle('active',activeId===s.id&&!s.minimized);
+  }
+
+  let busyDepth=0;
+  let lagActionCount=0;
+  let nextLagAt=3+Math.floor(Math.random()*3); // 3rd, 4th, or 5th eligible action
+  function postHost(action, detail={}){
+    if(window.parent===window) return;
+    window.parent.postMessage({type:'softie-os',action,...detail},'*');
+  }
+  function setBusy(on){
+    const wasBusy=busyDepth>0;
+    busyDepth=Math.max(0,busyDepth+(on?1:-1));
+    const isBusy=busyDepth>0;
+    os.classList.toggle('busy',isBusy);
+    if(isBusy!==wasBusy){
+      postHost(isBusy?'latency-start':'latency-end',{busyDepth});
+    }
+  }
+  function oldMachineDelay(kind='generic'){
+    const ranges={
+      open:[170,330],
+      heavy:[240,430],
+      menu:[70,145],
+      close:[65,135],
+      move:[145,285],
+      generic:[90,180]
+    };
+    const [min,max]=ranges[kind]||ranges.generic;
+    return Math.round(min+Math.random()*(max-min));
+  }
+  function shouldLag(){
+    lagActionCount++;
+    if(lagActionCount<nextLagAt) return false;
+    lagActionCount=0;
+    nextLagAt=3+Math.floor(Math.random()*3);
+    return true;
+  }
+  function afterOldMachinePause(fn,kind='generic',force=false){
+    if(!force && !shouldLag()) { fn(); return; }
+    setBusy(true);
+    const extra=Math.random()<0.16 ? Math.round(70+Math.random()*120) : 0;
+    setTimeout(()=>{ try{fn();} finally{setBusy(false);} }, oldMachineDelay(kind)+extra);
+  }
+
+  function openWindowNow(id){
+    const s=createWindow(id); if(!s)return;
+    s.open=true;s.minimized=false;
+    focusWindow(id);
+    applyState(s);
+    startMenu.classList.remove('open');startBtn.classList.remove('pressed');startBtn.setAttribute('aria-expanded','false');
+  }
+  function openWindow(id){
+    const existing=apps.get(id);
+    if(existing?.open){
+      afterOldMachinePause(()=>restoreWindow(id),'generic');
+      return;
+    }
+    const kind=(id==='solitaire'||id==='paint')?'heavy':'open';
+    afterOldMachinePause(()=>openWindowNow(id),kind);
+  }
+  function closeWindow(id){
+    const s=apps.get(id); if(!s)return;
+    s.open=false;s.minimized=false;
+    applyState(s);
+    if(activeId===id){activeId=null;focusTopmost();}
+  }
+  function minimizeWindow(id){
+    const s=apps.get(id); if(!s)return;
+    s.minimized=true;applyState(s);
+    if(activeId===id){activeId=null;focusTopmost();}
+  }
+  function restoreWindow(id){
+    const s=apps.get(id); if(!s)return;
+    s.open=true;s.minimized=false;focusWindow(id);applyState(s);
+  }
+  function toggleMaximize(id){
+    const s=apps.get(id); if(!s)return;
+    if(!s.maximized){s.restore={x:s.x,y:s.y,w:s.w,h:s.h};s.maximized=true}
+    else{if(s.restore)Object.assign(s,s.restore);s.maximized=false}
+    focusWindow(id);applyState(s);
+  }
+  function focusWindow(id){
+    const s=apps.get(id); if(!s||!s.open||s.minimized)return;
+    activeId=id;s.z=++zCounter;
+    for(const a of apps.values()) applyState(a);
+  }
+  function focusTopmost(){
+    const open=[...apps.values()].filter(s=>s.open&&!s.minimized).sort((a,b)=>b.z-a.z);
+    if(open[0]) focusWindow(open[0].id); else for(const a of apps.values())applyState(a);
+  }
+
+  function gridLimits(){
+    const desktop=$('#desktop');
+    const sample=$('.desktop-icon');
+    const iconW=sample?.offsetWidth||84;
+    const iconH=sample?.offsetHeight||78;
+    return {
+      cols:Math.max(1,Math.floor((desktop.clientWidth-GRID.left-iconW)/GRID.cellW)+1),
+      rows:Math.max(1,Math.floor((desktop.clientHeight-GRID.top-iconH)/GRID.cellH)+1)
+    };
+  }
+
+  function clampCell(col,row){
+    const lim=gridLimits();
+    return {
+      col:Math.max(0,Math.min(Math.round(col),lim.cols-1)),
+      row:Math.max(0,Math.min(Math.round(row),lim.rows-1))
+    };
+  }
+
+  function cellToPixels(col,row){
+    const c=clampCell(col,row);
+    return { left:GRID.left+c.col*GRID.cellW, top:GRID.top+c.row*GRID.cellH, ...c };
+  }
+
+  function readIconCell(icon){
+    const col=Number(icon.dataset.gridCol);
+    const row=Number(icon.dataset.gridRow);
+    if(Number.isFinite(col)&&Number.isFinite(row)) return clampCell(col,row);
+    return clampCell(
+      (parseFloat(icon.style.left)-GRID.left)/GRID.cellW,
+      (parseFloat(icon.style.top)-GRID.top)/GRID.cellH
+    );
+  }
+
+  function placeIcon(icon,col,row){
+    const p=cellToPixels(col,row);
+    icon.dataset.gridCol=String(p.col);
+    icon.dataset.gridRow=String(p.row);
+    icon.style.left=p.left+'px';
+    icon.style.top=p.top+'px';
+  }
+
+  function occupiedAt(col,row,exceptIcon=null){
+    return $$('.desktop-icon').find(icon=>{
+      if(icon===exceptIcon)return false;
+      const c=readIconCell(icon);
+      return c.col===col&&c.row===row;
+    })||null;
+  }
+
+  function defaultGrid(){
+    // Old-machine default: one strict vertical icon column, Trash at the top.
+    return {
+      trash:{col:0,row:0},
+      rx:{col:0,row:1},
+      solitaire:{col:0,row:2},
+      paint:{col:0,row:3}
+    };
+  }
+
+  function loadDesktopPositions(){
+    const defaults=defaultGrid();
+    let saved={};
+    try{ saved=JSON.parse(localStorage.getItem(desktopPositionsKey)||'{}')||{}; }catch{}
+    // Ignore the old free-form coordinates: this machine only supports a grid.
+    $$('.desktop-icon').forEach(icon=>{
+      const pos=saved[icon.dataset.app]||defaults[icon.dataset.app]||{col:0,row:0};
+      placeIcon(icon,Number(pos.col)||0,Number(pos.row)||0);
+    });
+  }
+
+  function saveDesktopPositions(){
+    const saved={};
+    $$('.desktop-icon').forEach(icon=>{
+      const c=readIconCell(icon);
+      saved[icon.dataset.app]={col:c.col,row:c.row};
+    });
+    try{ localStorage.setItem(desktopPositionsKey,JSON.stringify(saved)); }catch{}
+  }
+
+  function startIconDrag(e,icon){
+    if(e.button!==0)return;
+    const startCell=readIconCell(icon);
+    $$('.desktop-icon').forEach(i=>i.classList.toggle('selected',i===icon));
+    iconDragState={
+      icon,
+      startX:e.clientX,
+      startY:e.clientY,
+      startCol:startCell.col,
+      startRow:startCell.row,
+      currentCol:startCell.col,
+      currentRow:startCell.row,
+      movePending:false,
+      moved:false,
+      pointerId:e.pointerId
+    };
+    icon.setPointerCapture(e.pointerId);
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  function startDrag(e,id){
+    if(e.button!==0||e.target.closest('button'))return;
+    const s=apps.get(id); if(!s||s.maximized)return;
+    focusWindow(id);
+    dragState={id,startX:e.clientX,startY:e.clientY,x:s.x,y:s.y,pointerId:e.pointerId};
+    e.currentTarget.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  }
+  function startResize(e,id){
+    if(e.button!==0)return;
+    const s=apps.get(id); if(!s||s.maximized)return;
+    focusWindow(id);
+    resizeState={id,startX:e.clientX,startY:e.clientY,w:s.w,h:s.h,pointerId:e.pointerId};
+    e.currentTarget.setPointerCapture(e.pointerId);e.preventDefault();e.stopPropagation();
+  }
+  document.addEventListener('pointermove',e=>{
+    if(iconDragState){
+      const s=iconDragState;
+      const dx=e.clientX-s.startX;
+      const dy=e.clientY-s.startY;
+      if(!s.moved && Math.hypot(dx,dy)>5){
+        s.moved=true;
+        s.icon.classList.add('dragging');
+      }
+      if(s.moved){
+        // Deliberately coarse: shortcuts jump from grid cell to grid cell.
+        const target=clampCell(
+          s.startCol + Math.round(dx/GRID.cellW),
+          s.startRow + Math.round(dy/GRID.cellH)
+        );
+        if(target.col!==s.currentCol || target.row!==s.currentRow){
+          if(s.movePending) return;
+          const fromCol=s.currentCol, fromRow=s.currentRow;
+          const performMove=()=>{
+            const other=occupiedAt(target.col,target.row,s.icon);
+            if(other){
+              // An occupied grid cell swaps positions instead of allowing overlap.
+              placeIcon(other,fromCol,fromRow);
+            }
+            placeIcon(s.icon,target.col,target.row);
+            s.currentCol=target.col;
+            s.currentRow=target.row;
+            s.movePending=false;
+          };
+
+          // Most moves snap immediately. Every few file/shortcut moves, the old
+          // machine hesitates, shows its little blue activity indicator, then catches up.
+          if(shouldLag()){
+            s.movePending=true;
+            setBusy(true);
+            setTimeout(()=>{ try{performMove();} finally{setBusy(false);} }, oldMachineDelay('move'));
+          }else{
+            performMove();
+          }
+        }
+      }
+    }
+    if(dragState){
+      const s=apps.get(dragState.id); const b=maxBounds();
+      s.x=Math.max(-s.w+90,Math.min(dragState.x+e.clientX-dragState.startX,b.w-80));
+      s.y=Math.max(0,Math.min(dragState.y+e.clientY-dragState.startY,b.h-30));applyState(s);
+    }
+    if(resizeState){
+      const s=apps.get(resizeState.id); const b=maxBounds();
+      s.w=Math.max(s.minW,Math.min(resizeState.w+e.clientX-resizeState.startX,b.w-s.x));
+      s.h=Math.max(s.minH,Math.min(resizeState.h+e.clientY-resizeState.startY,b.h-s.y));applyState(s);
+    }
+  });
+  document.addEventListener('pointerup',()=>{
+    if(iconDragState){
+      const {icon,moved}=iconDragState;
+      icon.classList.remove('dragging');
+      if(moved){
+        suppressIconOpenUntil=performance.now()+350;
+        saveDesktopPositions();
+      }
+      iconDragState=null;
+    }
+    dragState=null;
+    resizeState=null;
+  });
+
+  // Desktop interaction: select, snap shortcuts to a rigid grid, double-click to open.
+  loadDesktopPositions();
+  $$('.desktop-icon').forEach(icon=>{
+    icon.addEventListener('pointerdown',e=>startIconDrag(e,icon));
+    icon.addEventListener('click',e=>{
+      if(performance.now()<suppressIconOpenUntil){e.preventDefault();e.stopPropagation();return;}
+      $$('.desktop-icon').forEach(i=>i.classList.toggle('selected',i===icon));
+      e.stopPropagation();
+    });
+    icon.addEventListener('dblclick',e=>{
+      if(performance.now()<suppressIconOpenUntil){e.preventDefault();return;}
+      openWindow(icon.dataset.app);
+    });
+  });
+  $('#desktop').addEventListener('pointerdown',e=>{
+    if(e.target.id==='desktop') $$('.desktop-icon').forEach(i=>i.classList.remove('selected'));
+  });
+
+  startBtn.addEventListener('click',e=>{
+    e.stopPropagation();
+    if(os.classList.contains('busy')) return;
+    afterOldMachinePause(()=>{
+      const isOpen=startMenu.classList.toggle('open');
+      startBtn.classList.toggle('pressed',isOpen);startBtn.setAttribute('aria-expanded',String(isOpen));
+    },'menu');
+  });
+  document.addEventListener('pointerdown',e=>{
+    if(!startMenu.contains(e.target)&&!startBtn.contains(e.target)){startMenu.classList.remove('open');startBtn.classList.remove('pressed');startBtn.setAttribute('aria-expanded','false')}
+  });
+  $$('[data-open]').forEach(el=>el.addEventListener('click',()=>openWindow(el.dataset.open)));
+
+  // Power-down is intentionally theatrical, not a real system state.
+  $('#shutdownItem').addEventListener('click',()=>{
+    startMenu.classList.remove('open');startBtn.classList.remove('pressed');
+    powerLayer.className='show';
+    setTimeout(()=>powerLayer.className='off',650);
+  });
+  $('#bootBtn').addEventListener('click',()=>{
+    powerLayer.className='';
+    const dot=$('#powerDot'); dot.style.animation='none'; void dot.offsetWidth; dot.style.animation='';
+  });
+
+  function updateClock(){
+    const d=new Date();
+    $('#clock').textContent=d.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'});
+  }
+  updateClock();setInterval(updateClock,1000*15);
+
+
+  // Messages from embedded apps.
+  window.addEventListener('message',e=>{
+    const m=e.data;
+    if(!m||!['softie-os','frozen-os'].includes(m.type)||!m.appId)return;
+    if(m.action==='close')closeWindow(m.appId);
+    if(m.action==='minimize')minimizeWindow(m.appId);
+    if(m.action==='maximize')toggleMaximize(m.appId);
+  });
+
+  // Host/screen bridge. Esc asks the sculpture to leave computer mode.
+  document.addEventListener('keydown',e=>{
+    if(e.altKey&&e.key==='F4'&&activeId){e.preventDefault();closeWindow(activeId);return}
+    if(e.key==='Escape'){
+      startMenu.classList.remove('open');startBtn.classList.remove('pressed');
+      if(document.documentElement.classList.contains('sculpture')){
+        window.parent.postMessage({type:'softie-os',action:'exit-screen'},'*');
+      }
+    }
+  });
+
+  window.addEventListener('resize',()=>{
+    for(const a of apps.values())applyState(a);
+    $$('.desktop-icon').forEach(icon=>{
+      const c=readIconCell(icon);
+      placeIcon(icon,c.col,c.row);
+    });
+    saveDesktopPositions();
+  });
+
+  // Public API so the Three.js host can drive the OS if desired.
+  window.SoftieOS={open:openWindow,close:closeWindow,minimize:minimizeWindow,maximize:toggleMaximize,shutdown:()=>$('#shutdownItem').click()};
+  window.FrozenOS=window.SoftieOS; // backwards compatibility with earlier sculpture wiring
+
+  // Start with Solitaire maximized, matching the current sculpture, while still
+  // allowing the user to close it into the desktop.
+  const solitaire=createWindow('solitaire');
+  solitaire.open=true;solitaire.maximized=true;solitaire.restore={x:82,y:34,w:840,h:620};
+  focusWindow('solitaire');applyState(solitaire);
+  os.focus();
+})();
+</script>
+</body>
+</html>

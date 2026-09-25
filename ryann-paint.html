@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Ryann Paint</title>
+<style>
+  :root{--silver:#d4d0c8;--font:Tahoma,"MS Sans Serif",Arial,sans-serif}
+  *{box-sizing:border-box}
+  html,body{margin:0;width:100%;height:100%;overflow:hidden;font-family:var(--font);font-size:12px}
+  #app{height:100%;display:flex;flex-direction:column;background:var(--silver)}
+  #menu{height:25px;flex:0 0 25px;border-bottom:1px solid #808080;padding:0 5px;display:flex;align-items:center;gap:10px;font-size:11px}
+  #menu button{font:inherit;background:transparent;border:0;padding:2px 6px;cursor:default}
+  #menu button:hover{background:#0a246a;color:#fff}
+  #tools{flex:0 0 34px;display:flex;align-items:center;gap:4px;padding:3px 6px;border-bottom:1px solid #808080}
+  .swatch{width:24px;height:24px;border:1px solid #404040;border-right-color:#fff;border-bottom-color:#fff;padding:0;cursor:pointer}
+  .swatch.picked{outline:2px solid #0a246a;outline-offset:-2px}
+  #clear{margin-left:auto;height:24px;padding:1px 10px}
+  #stage{position:relative;flex:1;min-height:0;background:#808080;padding:6px}
+  #pad{position:absolute;inset:6px;background:#fff;border:1px solid #404040;touch-action:none;cursor:crosshair}
+</style>
+</head>
+<body>
+<div id="app" aria-label="Ryann Paint">
+  <div id="menu"><button id="clearTop">File&nbsp;&nbsp; Edit&nbsp;&nbsp; View&nbsp;&nbsp; Help</button></div>
+  <div id="tools" role="toolbar" aria-label="Colors"></div>
+  <div id="stage"><canvas id="pad"></canvas></div>
+</div>
+<script>
+(() => {
+  const colors = ['#000000','#7a7a7a','#ffffff','#e84b4b','#e2b84d','#5aa56c','#557fc5','#8b5cf6'];
+  const tools = document.getElementById('tools');
+  const canvas = document.getElementById('pad');
+  const ctx = canvas.getContext('2d');
+  let color = '#000000';
+  let drawing = false;
+  let last = null;
+
+  colors.forEach((c, i) => {
+    const b = document.createElement('button');
+    b.className = 'swatch' + (i === 0 ? ' picked' : '');
+    b.style.background = c;
+    b.title = c;
+    b.setAttribute('aria-label', 'Color ' + c);
+    b.addEventListener('click', () => {
+      color = c;
+      [...tools.querySelectorAll('.swatch')].forEach(x => x.classList.remove('picked'));
+      b.classList.add('picked');
+    });
+    tools.appendChild(b);
+  });
+
+  const clearBtn = document.createElement('button');
+  clearBtn.id = 'clear';
+  clearBtn.textContent = 'Clear';
+  clearBtn.addEventListener('click', () => {
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  });
+  tools.appendChild(clearBtn);
+  document.getElementById('clearTop').addEventListener('click', () => clearBtn.click());
+
+  function fit() {
+    const r = canvas.getBoundingClientRect();
+    const img = document.createElement('canvas');
+    img.width = canvas.width || 0;
+    img.height = canvas.height || 0;
+    if (img.width && img.height) img.getContext('2d').drawImage(canvas, 0, 0);
+    canvas.width = Math.max(50, Math.round(r.width));
+    canvas.height = Math.max(50, Math.round(r.height));
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    if (img.width && img.height) ctx.drawImage(img, 0, 0);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+  }
+  new ResizeObserver(fit).observe(canvas);
+  fit();
+
+  function pos(e) {
+    const r = canvas.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  }
+  canvas.addEventListener('pointerdown', e => {
+    drawing = true;
+    last = pos(e);
+    canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener('pointermove', e => {
+    if (!drawing) return;
+    const p = pos(e);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(last.x, last.y);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+    last = p;
+  });
+  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) {
+    canvas.addEventListener(ev, () => { drawing = false; last = null; });
+  }
+})();
+</script>
+</body>
+</html>

@@ -41,6 +41,8 @@ import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { CSS3DRenderer, CSS3DObject } from "three/addons/renderers/CSS3DRenderer.js";
 import { FallingDevices } from "./FallingDevices.js";
+import { createSoftieCRTEffect } from "./softie-crt-effect.js";
+import { wireSoftieOS } from "./softie-os-bridge.js";
 
 /* ============================================================
    SHARED VOID STAGE
@@ -732,9 +734,9 @@ scene.add(tvFlight);
 /* hidden until Rapier boots and spawns them — the void starts empty */
 crtFlight.visible = false; lapFlight.visible = false; tvFlight.visible = false;
 
-/* Solitaire overlay: the actual game page, mapped 1:1 onto the CRT
-   screen quad. Lives inside the monitor group so it rides the fall.
-   Hidden until the desktop icon opens it; the × in its corner closes. */
+/* Softie overlay: the full little computer on the CRT screen quad.
+   Lives inside the monitor group so it rides the fall. Softie boots
+   with Solitaire maximized; its titlebar × closes into the desktop. */
 const gameDiv = document.createElement("div");
 gameDiv.style.width = "640px";
 gameDiv.style.height = "480px";
@@ -742,7 +744,7 @@ gameDiv.style.position = "relative";
 gameDiv.style.pointerEvents = "none"; /* click-through until focused */
 gameDiv.style.overflow = "hidden";
 const gameFrame = document.createElement("iframe");
-gameFrame.src = "solitaire-win2000.html";
+gameFrame.src = "softie-os.html?sculpture=1";
 gameFrame.style.width = "640px";
 gameFrame.style.height = "480px";
 gameFrame.style.border = "0";
@@ -874,7 +876,8 @@ function enterFocus(name){
   renderer.domElement.style.cursor = "none";
   let mesh, w, h;
   if(name==="crt"){ mesh=crt.display; w=crt.screenW*CRT_S; h=crt.screenH*CRT_S;
-    if(!crt.S.power){ crt.togglePower(); } }
+    if(!crt.S.power){ crt.togglePower(); }
+    computer.enterComputerMode(); }
   if(name==="laptop"){ mesh=lap.display; w=lap.screenW*LAP_S; h=lap.screenH*LAP_S;
     lap.cursorActive = true; }
   if(name==="tv"){ mesh=tvd.innerScreen; w=tvd.screenW*TV_S; h=tvd.screenH*TV_S;
@@ -897,8 +900,15 @@ function exitFocus(){
   hud.classList.remove("gone");
   renderer.domElement.style.cursor = "default";
   tweenCamTo(OVERVIEW_POS, OVERVIEW_TGT, 1.25, ()=>{});
+  computer.exitComputerMode();
 }
 exitBtn.addEventListener("click", exitFocus);
+
+/* Softie desktop on the CRT + a restrained CRT glass layer that only
+   dips when Softie itself reports a latency moment (no random glitch).
+   Esc inside Softie posts exit-screen → the bridge steps back out. */
+const crtEffect = createSoftieCRTEffect({ THREE, screenMesh: crt.display, camera });
+const computer = wireSoftieOS({ iframe: gameFrame, crtEffect, onExit: () => exitFocus() });
 addEventListener("keydown", (e)=>{
   if(e.key === "Escape"){
     if(focused){ exitFocus(); return; }
@@ -1010,6 +1020,7 @@ function animate(){
   const t = clock.elapsedTime;
 
   falling.update(dt);
+  crtEffect.update(dt);
 
   /* camera flights (screen focus transitions) */
   if(camTween){
