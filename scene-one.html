@@ -1178,11 +1178,8 @@ const tvControlGroup=document.createElement("div");
 tvControlGroup.setAttribute("role","group");
 tvControlGroup.setAttribute("aria-label","Television front panel");
 tvControlGroup.style.cssText="position:fixed;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap";
-const tvControlHint=document.createElement("div");
-tvControlHint.style.cssText="display:none;position:fixed;left:50%;bottom:17px;transform:translateX(-50%);z-index:12;color:#e2c999;background:rgba(18,9,4,.82);padding:6px 11px;font:11px Georgia,serif;letter-spacing:.08em;pointer-events:none";
-document.body.append(tvControlGroup,tvControlHint);
+document.body.append(tvControlGroup);
 const tvInputs={};
-let activeTVControl="vhf";
 for(const [id,name,min,max,step] of [
   ["vhf","VHF channel selector",1,14,1],
   ["uhf","UHF continuous tuning",0,1000,1],
@@ -1193,7 +1190,6 @@ for(const [id,name,min,max,step] of [
   input.type="range"; input.min=min; input.max=max; input.step=step;
   input.tabIndex=-1;
   input.setAttribute("aria-label",name);
-  input.addEventListener("focus",()=>{activeTVControl=id;tvKeyboard.sync();});
   input.addEventListener("input",()=>setTVControl(id,id==="vhf"?Number(input.value):id==="uhf"?Number(input.value)/1000:Number(input.value)/100));
   tvControlGroup.appendChild(input); tvInputs[id]=input;
 }
@@ -1207,15 +1203,12 @@ tvKeyboard={
         id==="uhf"?`UHF channel ${Math.round(14+tvBroadcast.uhf*55)}`:`${values[id]} percent`;
       input.setAttribute("aria-valuetext",spoken);
     }
-    const current=tvInputs[activeTVControl];
-    tvControlHint.textContent=`${current.getAttribute("aria-label")}: ${current.getAttribute("aria-valuetext")}  ·  Tab selects · arrows turn`;
   },
   show(){
     for(const input of Object.values(tvInputs))input.tabIndex=0;
-    tvControlHint.style.display="block";this.sync();tvInputs.vhf.focus({preventScroll:true});
+    this.sync();tvInputs.vhf.focus({preventScroll:true});
   },
   hide(){
-    tvControlHint.style.display="none";
     if(tvControlGroup.contains(document.activeElement))document.activeElement.blur();
     for(const input of Object.values(tvInputs))input.tabIndex=-1;
   },
