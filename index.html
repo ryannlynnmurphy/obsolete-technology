@@ -763,18 +763,21 @@ const D2R = THREE.MathUtils.degToRad;
 const IDENT_Q = [0, 0, 0, 1];
 
 const falling = new FallingDevices({ scene, camera, renderer });
-/* The drop: staggered slots down an empty shaft. The TV drops hard
-   and runs ahead; CRT drifts in the middle; laptop floats last and
-   slowest. Wide x separation so they never pile — the space between
-   them is the composition. Small tilts, slow rotation, no floor. */
+/* The sculpture: three machines suspended together in the void.
+   LAPTOP upper-right / CRT middle-left, screen clear / TV
+   bottom-center-right, the anchor. Staged with real black air between
+   silhouettes; Z staggered (laptop rear, CRT middle, TV forward).
+   Bodies spawn here with zero velocity and are held Fixed — the exact
+   release transform of the final drop. dropG survives per device so
+   the TV still pulls harder than the laptop on release. */
 falling.init([
   {
     name: "tv", object: tvFlight,
     delay: 0,
-    position: { x: 0.5, y: 15.5, z: 0 },
-    rotation: { x: D2R(3), y: D2R(-4), z: D2R(2) },
-    velocity: { x: 0, y: -1, z: 0 },
-    angularVelocity: { x: 0.15, y: 0.10, z: -0.12 },
+    position: { x: 2.4, y: -1.6, z: 1.6 },
+    rotation: { x: D2R(2), y: D2R(-6), z: D2R(1) },
+    velocity: { x: 0, y: 0, z: 0 },
+    angularVelocity: { x: 0, y: 0, z: 0 },
     mass: 30, dropDamp: 3.0, dropG: 1.35, fallDamp: 13,
     colliders: [
       { h: [2.95, 1.5, 0.85], p: [0, 1.47, 0], q: IDENT_Q },
@@ -784,11 +787,11 @@ falling.init([
   },
   {
     name: "crt", object: crtFlight,
-    delay: 0.4,
-    position: { x: -1.8, y: 16.5, z: 0.3 },
-    rotation: { x: D2R(-2), y: D2R(3), z: D2R(-3) },
-    velocity: { x: 0, y: -0.5, z: 0 },
-    angularVelocity: { x: -0.12, y: 0.15, z: 0.10 },
+    delay: 0,
+    position: { x: -3.6, y: 3.2, z: 0.0 },
+    rotation: { x: D2R(3), y: D2R(9), z: D2R(-4) },
+    velocity: { x: 0, y: 0, z: 0 },
+    angularVelocity: { x: 0, y: 0, z: 0 },
     mass: 14, dropDamp: 3.2, dropG: 1.0, fallDamp: 24,
     colliders: [
       { h: [2.016, 1.584, 1.224], p: [0, 0, 0], q: IDENT_Q },
@@ -797,11 +800,11 @@ falling.init([
   },
   {
     name: "laptop", object: lapFlight,
-    delay: 0.9,
-    position: { x: 2.2, y: 17.5, z: -0.3 },
-    rotation: { x: D2R(14), y: D2R(28), z: D2R(10) },
-    velocity: { x: 0, y: -0.5, z: 0 },
-    angularVelocity: { x: 0.15, y: -0.15, z: 0.12 },
+    delay: 0,
+    position: { x: 3.4, y: 5.6, z: -1.6 },
+    rotation: { x: D2R(18), y: D2R(22), z: D2R(6) },
+    velocity: { x: 0, y: 0, z: 0 },
+    angularVelocity: { x: 0, y: 0, z: 0 },
     mass: 4, dropDamp: 2.4, dropG: 0.85, fallDamp: 37,
     colliders: [
       /* base (inner offset rotated by base yaw) */
@@ -813,11 +816,63 @@ falling.init([
   },
 ]);
 
+/* ---- fall-in intro: black void → fast drop → hard freeze ----
+   The sculpture doesn't start staged; it arrives. The three flight
+   groups fly ballistically from high start transforms and land EXACTLY
+   on the sculpture transforms at INTRO_T (velocities solved for the
+   target, so the freeze is a visual no-op). Rapier bodies spawn at
+   that instant via spawnPaused — physics takes over with zero snap.
+   Orbit / focus input stays off until the freeze lands. */
+const INTRO_WAIT = 0.25, INTRO_T = 0.7, INTRO_G = -10.5;
+const introMotions = new Map([
+  [lapFlight, { startP: new THREE.Vector3(4.0, 15.2, -2.0), startR: new THREE.Euler(D2R(10), D2R(34), D2R(10)),
+    endP: new THREE.Vector3(3.4, 5.6, -1.6), endR: new THREE.Euler(D2R(18), D2R(22), D2R(6)),
+    vel: new THREE.Vector3(), ang: new THREE.Vector3() }],
+  [crtFlight, { startP: new THREE.Vector3(-4.2, 15.8, -0.2), startR: new THREE.Euler(D2R(-6), D2R(-3), D2R(-9)),
+    endP: new THREE.Vector3(-3.6, 3.2, 0.0), endR: new THREE.Euler(D2R(3), D2R(9), D2R(-4)),
+    vel: new THREE.Vector3(), ang: new THREE.Vector3() }],
+  [tvFlight, { startP: new THREE.Vector3(2.8, 16.8, 1.4), startR: new THREE.Euler(D2R(7), D2R(-13), D2R(6)),
+    endP: new THREE.Vector3(2.4, -1.6, 1.6), endR: new THREE.Euler(D2R(2), D2R(-6), D2R(1)),
+    vel: new THREE.Vector3(), ang: new THREE.Vector3() }],
+]);
+for (const m of introMotions.values()){
+  m.vel.set((m.endP.x - m.startP.x) / INTRO_T,
+    (m.endP.y - m.startP.y - 0.5 * INTRO_G * INTRO_T * INTRO_T) / INTRO_T,
+    (m.endP.z - m.startP.z) / INTRO_T);
+  m.ang.set((m.endR.x - m.startR.x) / INTRO_T,
+    (m.endR.y - m.startR.y) / INTRO_T, (m.endR.z - m.startR.z) / INTRO_T);
+}
+let sculptureReady = false, introT = -INTRO_WAIT;
+falling.setSpawnPaused(true);
+for (const [g, m] of introMotions){
+  g.position.copy(m.startP);
+  g.rotation.copy(m.startR);
+  g.visible = true;
+  g.updateMatrixWorld(true);
+}
+function finishIntro(){
+  if(sculptureReady) return;
+  for (const [g, m] of introMotions){
+    g.position.copy(m.endP);
+    g.rotation.set(m.endR.x, m.endR.y, m.endR.z);
+    g.updateMatrixWorld(true);
+  }
+  sculptureReady = true;
+  falling.setSpawnPaused(false);
+  /* Fresh orbit baseline: the fall-in counts for nothing. */
+  syncOrbitFromCamera();
+  prevAzimuth = azimuthOf();
+  coherentTotal = 0; dominantDir = 0;
+  visitedSectors = new Set([sectorOf(prevAzimuth)]);
+}
+
 /* ============================================================
-   CAMERA RIG + FOCUS + GRAB.
-   Click a screen: the camera flies in and that machine is yours
-   (body frozen so the screen is stable). ESC / button steps back
-   out. Drag a body: its fall suspends while held.
+   CAMERA RIG + SCULPTURE ORBIT + FOCUS.
+   Sculpture mode: drag empty space to walk around the installation
+   (camera-only orbit — bodies never move). A short click steps inside
+   a screen; a drag orbits. ESC steps back out to the orbit spot.
+   After one genuine 360° revolution the sculpture releases and falls
+   away permanently (one-way transition, camera stays behind).
    ============================================================ */
 const easeIO = (t) => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 const _tgt = OVERVIEW_TGT.clone();
@@ -825,6 +880,95 @@ let camTween = null;
 function tweenCamTo(p1, t1, dur, done){
   camTween = {t:0, dur, p0:camera.position.clone(), p1:p1.clone(),
               t0:_tgt.clone(), t1:t1.clone(), done};
+}
+
+/* ---- sculpture orbit (lightweight spherical rig, no OrbitControls
+   so focus tweens / raycast / CSS3D keep their existing behavior) ---- */
+const ORBIT_TGT = new THREE.Vector3(0.7, 2.4, 0); // visual center of the trio
+let orbitRadius = camera.position.distanceTo(ORBIT_TGT);
+let orbitTheta = Math.atan2(camera.position.x - ORBIT_TGT.x, camera.position.z - ORBIT_TGT.z);
+let orbitPhi = Math.acos(THREE.MathUtils.clamp(
+  (camera.position.y - ORBIT_TGT.y) / Math.max(orbitRadius, 1e-6), -1, 1));
+const ORBIT_PHI_MIN = 1.05;  // modest vertical band — never flips over
+const ORBIT_PHI_MAX = 1.85;
+const ORBIT_THETA_SPEED = 0.0055;
+const ORBIT_PHI_SPEED = 0.0032;
+function syncOrbitFromCamera(){
+  _v4.copy(camera.position).sub(ORBIT_TGT);
+  orbitRadius = THREE.MathUtils.clamp(_v4.length(), 6, 45);
+  if(orbitRadius < 1e-6) return;
+  orbitTheta = Math.atan2(_v4.x, _v4.z);
+  orbitPhi = THREE.MathUtils.clamp(
+    Math.acos(THREE.MathUtils.clamp(_v4.y / orbitRadius, -1, 1)),
+    ORBIT_PHI_MIN, ORBIT_PHI_MAX);
+}
+function applyOrbitToCamera(){
+  const sp = Math.sin(orbitPhi), cp = Math.cos(orbitPhi);
+  camera.position.set(
+    ORBIT_TGT.x + orbitRadius * sp * Math.sin(orbitTheta),
+    ORBIT_TGT.y + orbitRadius * cp,
+    ORBIT_TGT.z + orbitRadius * sp * Math.cos(orbitTheta));
+  _tgt.copy(ORBIT_TGT);
+}
+
+/* ---- genuine-revolution tracker (no UI, no progress bar) ----
+   Azimuth via atan2(relX, relZ); deltas normalized across -PI/+PI so
+   179° → -179° counts as ~2°, not 358°. Directional coherence: the
+   dominant direction locks after ~15° of travel; small jitter is
+   ignored, real reversals subtract. 12 sector bins require the camera
+   to actually visit nearly every side. */
+let orbitCompleted = false;   // fires triggerFinalDrop() exactly once
+let prevAzimuth = null;
+let coherentTotal = 0;
+let dominantDir = 0;
+let visitedSectors = new Set();
+const ORBIT_GOAL = Math.PI * 2 - 0.15; // ~351° — fires as you arrive home
+const DOMINANT_LOCK = 0.26;            // ~15°
+const JITTER_EPS = 0.0009;
+const REVERSAL_JITTER = 0.012;         // ~0.7° — free hand tremor
+function azimuthOf(){
+  return Math.atan2(camera.position.x - ORBIT_TGT.x, camera.position.z - ORBIT_TGT.z);
+}
+function sectorOf(az){
+  const s = Math.floor((az + Math.PI) / (Math.PI * 2) * 12) % 12;
+  return ((s % 12) + 12) % 12;
+}
+function noteAzimuthSample(az){
+  if(orbitCompleted || focused || camTween || falling.isFinalDrop()){ prevAzimuth = az; return; }
+  if(!sculptureReady || !falling.world){ prevAzimuth = az; return; }
+  if(prevAzimuth === null){ prevAzimuth = az; visitedSectors.add(sectorOf(az)); return; }
+  let d = az - prevAzimuth;
+  while(d > Math.PI) d -= Math.PI * 2;
+  while(d < -Math.PI) d += Math.PI * 2;
+  prevAzimuth = az;
+  if(Math.abs(d) < JITTER_EPS) return;
+  if(dominantDir === 0){
+    coherentTotal += d;
+    visitedSectors.add(sectorOf(az));
+    if(Math.abs(coherentTotal) >= DOMINANT_LOCK) dominantDir = Math.sign(coherentTotal);
+    if(Math.abs(coherentTotal) >= ORBIT_GOAL && visitedSectors.size >= 10) fireOrbitComplete();
+    return;
+  }
+  if(Math.sign(d) === dominantDir){
+    coherentTotal += d;
+    visitedSectors.add(sectorOf(az));
+  }else{
+    if(Math.abs(d) < REVERSAL_JITTER) return; // hand jitter — ignore
+    coherentTotal += d; // real reversal subtracts; wiggling nets ~0
+    if(Math.abs(coherentTotal) < DOMINANT_LOCK * 0.5){
+      // lost the thread — let a new dominant direction emerge
+      dominantDir = 0;
+    }
+  }
+  if(Math.abs(coherentTotal) >= ORBIT_GOAL && visitedSectors.size >= 10) fireOrbitComplete();
+}
+function fireOrbitComplete(){
+  if(orbitCompleted) return;
+  /* Immediate release: the exact sculpture in view loses support.
+     Camera stays where the orbit finished — it never chases.
+     If physics is not up yet, wait — never consume the one shot. */
+  if(!falling.triggerFinalDrop()) return;
+  orbitCompleted = true;
 }
 function computeFocusPose(mesh, w, h){
   mesh.updateWorldMatrix(true,false);
@@ -848,8 +992,10 @@ function computeFocusPose(mesh, w, h){
 
 const exitBtn = document.getElementById("exitBtn");
 let focused = null;          // 'crt' | 'laptop' | 'tv' | null
-let downInfo = null;         // pending click (screen focus vs grab decision)
+let downInfo = null;         // pending click (screen focus vs orbit-drag decision)
 let lastHoverXY = null;      // last pointer position, for hover-cursor refresh
+let savedOrbitPos = null, savedOrbitTgt = null; // return spot after focus
+let orbitDrag = null;        // active empty-space drag → orbit (not a click)
 
 function setPtr(e){
   _ptr.x = (e.clientX/innerWidth)*2-1;
@@ -865,7 +1011,13 @@ function rayScreens(e){
 
 function enterFocus(name){
   if(focused) return;
+  /* No stepping inside mid-air: screens become clickable once the
+     sculpture freezes. After the release the void stays empty. */
+  if(!sculptureReady || falling.isFinalDrop()) return;
   focused = name;
+  savedOrbitPos = camera.position.clone();
+  savedOrbitTgt = _tgt.clone();
+  orbitDrag = null;
   exitBtn.classList.add("show");
   // The laptop draws its own cursor in-texture, so the system arrow hides
   // and the virtual cursor IS the mouse immediately. CRT/TV keep the arrow:
@@ -895,7 +1047,12 @@ function exitFocus(){
   focused = null;
   exitBtn.classList.remove("show");
   renderer.domElement.style.cursor = "default";
-  tweenCamTo(OVERVIEW_POS, OVERVIEW_TGT, 1.25, ()=>{});
+  /* Return to the exact orbit spot the viewer left — never reset to a
+     stock overview, and never count focus travel toward the revolution. */
+  const backP = savedOrbitPos ? savedOrbitPos.clone() : OVERVIEW_POS.clone();
+  const backT = savedOrbitTgt ? savedOrbitTgt.clone() : OVERVIEW_TGT.clone();
+  savedOrbitPos = null; savedOrbitTgt = null;
+  tweenCamTo(backP, backT, 1.25, ()=>{ syncOrbitFromCamera(); prevAzimuth = azimuthOf(); });
   computer.exitComputerMode();
 }
 exitBtn.addEventListener("click", exitFocus);
@@ -909,6 +1066,15 @@ addEventListener("keydown", (e)=>{
   if(e.key === "Escape"){
     if(focused){ exitFocus(); return; }
     if(lap.winDragging) lap.winDragging = false;
+    return;
+  }
+  /* DEBUG: Space (outside any machine) tests the release without
+     orbiting. Gated on !focused so laptop typing still gets spaces.
+     If the intro is still falling, Space finishes the freeze first. */
+  if(e.code === "Space" && !focused && !e.metaKey && !e.ctrlKey && !e.altKey){
+    e.preventDefault();
+    if(!sculptureReady) finishIntro();
+    fireOrbitComplete();
     return;
   }
   if(focused === "laptop" && !e.metaKey && !e.ctrlKey && !e.altKey){
@@ -935,6 +1101,11 @@ renderer.domElement.addEventListener("pointerdown", (e)=>{
     }
     return;
   }
+  if(camTween || !sculptureReady) return;
+  /* Every press may become an orbit-drag; a press on a screen may
+     instead become a click. The 6px threshold decides on move/up. */
+  orbitDrag = {x0:e.clientX, y0:e.clientY, lx:e.clientX, ly:e.clientY, orbiting:false};
+  if(falling.isFinalDrop()){ downInfo = null; return; }
   /* click a screen to step inside (laptop / tv), or anywhere on
      the CRT body — its whole screen is the game now */
   const scr = rayScreens(e);
@@ -943,6 +1114,7 @@ renderer.domElement.addEventListener("pointerdown", (e)=>{
   if(_ray.intersectObject(crt.group, true).length){
     downInfo = {x:e.clientX, y:e.clientY, kind:"focus", screen:"crt"}; return;
   }
+  downInfo = null;
 });
 renderer.domElement.addEventListener("pointermove", (e)=>{
   if(focused === "laptop"){
@@ -958,11 +1130,33 @@ renderer.domElement.addEventListener("pointermove", (e)=>{
     return;
   }
   if(focused) return;
+  if(orbitDrag && !camTween && e.buttons){
+    const totalMoved = Math.hypot(e.clientX-orbitDrag.x0, e.clientY-orbitDrag.y0);
+    if(totalMoved > 6){
+      /* This is a camera drag, not a click — a screen press that
+         moves this far never enters focus. */
+      downInfo = null;
+      orbitDrag.orbiting = true;
+      const dx = e.clientX - orbitDrag.lx, dy = e.clientY - orbitDrag.ly;
+      orbitDrag.lx = e.clientX; orbitDrag.ly = e.clientY;
+      orbitTheta -= dx * ORBIT_THETA_SPEED;
+      orbitPhi = THREE.MathUtils.clamp(orbitPhi - dy * ORBIT_PHI_SPEED, ORBIT_PHI_MIN, ORBIT_PHI_MAX);
+      applyOrbitToCamera();
+      noteAzimuthSample(azimuthOf());
+      renderer.domElement.style.cursor = "grabbing";
+      return;
+    }
+  }
   // Unfocused hover affordance: hand cursor over any clickable screen.
   lastHoverXY = {clientX:e.clientX, clientY:e.clientY};
-  renderer.domElement.style.cursor = rayScreens(e) ? "pointer" : "default";
+  if(!orbitDrag || !orbitDrag.orbiting)
+    renderer.domElement.style.cursor =
+      (!falling.isFinalDrop() && rayScreens(e)) ? "pointer" : "default";
 });
 renderer.domElement.addEventListener("pointerup", (e)=>{
+  const wasOrbiting = orbitDrag && orbitDrag.orbiting;
+  orbitDrag = null;
+  if(!wasOrbiting) renderer.domElement.style.cursor = "default";
   if(focused){
     /* clicks while inside go to the device OS.
        The CRT runs the overlay page itself — only its physical
@@ -986,6 +1180,7 @@ renderer.domElement.addEventListener("pointerup", (e)=>{
     lap.winDragging = false;
     return;
   }
+  if(wasOrbiting){ downInfo = null; syncOrbitFromCamera(); return; }
   if(!downInfo) return;
   /* click (not drag) on a screen steps inside */
   if(Math.hypot(e.clientX-downInfo.x, e.clientY-downInfo.y) > 6){ downInfo = null; return; }
@@ -994,10 +1189,12 @@ renderer.domElement.addEventListener("pointerup", (e)=>{
 });
 renderer.domElement.addEventListener("pointercancel", (e)=>{
   downInfo = null;
+  orbitDrag = null;
   lap.winDragging = false;
 });
 renderer.domElement.addEventListener("pointerleave", ()=>{
   lastHoverXY = null;
+  orbitDrag = null;
   if(!focused) renderer.domElement.style.cursor = "default";
 });
 renderer.domElement.addEventListener("wheel", (e)=>{
@@ -1006,6 +1203,27 @@ renderer.domElement.addEventListener("wheel", (e)=>{
     e.preventDefault();
   }
 }, {passive:false});
+
+/* DEBUG hooks (console only — no UI, no visuals): lets us verify the
+   orbit counter and the release from DevTools / automated checks. */
+window.__sculpture = {
+  orbit(){
+    return { theta: orbitTheta, phi: orbitPhi, radius: orbitRadius,
+      coherent: coherentTotal, sectors: [...visitedSectors].sort(),
+      dominant: dominantDir, completed: orbitCompleted,
+      azimuth: azimuthOf(), focused, camTween: !!camTween };
+  },
+  physics(){
+    return { finalDrop: falling.isFinalDrop(),
+      bodies: falling.devices.map((d)=>({ name: d.name,
+        spawned: d.spawned,
+        y: d.body ? +d.body.translation().y.toFixed(3) : null,
+        type: d.body ? d.body.bodyType() : null })) };
+  },
+  drop(){ if(!sculptureReady) finishIntro(); fireOrbitComplete(); return falling.isFinalDrop(); },
+  intro(){ return { ready: sculptureReady, t: +introT.toFixed(3),
+    flights: [...introMotions].map(([g, m]) => ({ y: +g.position.y.toFixed(2) })) }; },
+};
 
 /* ============================================================
    MAIN LOOP — controller steps physics, Three.js renders
@@ -1017,20 +1235,45 @@ let uiTick = 0;
 let hoverTick = 0;
 document.addEventListener("visibilitychange", ()=>{ hidden = document.hidden; });
 
+/* Frame the sculpture on load: pull the orbit rig onto the composed
+   trio so the opening view is intentional, not a leftover wide shot. */
+syncOrbitFromCamera();
+_tgt.copy(ORBIT_TGT);
+prevAzimuth = azimuthOf();
+visitedSectors.add(sectorOf(prevAzimuth));
+
 function animate(){
   requestAnimationFrame(animate);
   if(hidden) return;
   const dt = Math.min(clock.getDelta(), 0.05);
   const t = clock.elapsedTime;
 
+  /* Fall-in: hand-flown ballistic drop, then a hard freeze that hands
+     the exact transforms to physics. */
+  if(!sculptureReady){
+    introT += dt;
+    if(introT >= 0){
+      const ft = Math.min(introT, INTRO_T);
+      for (const [g, m] of introMotions){
+        g.position.set(m.startP.x + m.vel.x * ft,
+          m.startP.y + m.vel.y * ft + 0.5 * INTRO_G * ft * ft,
+          m.startP.z + m.vel.z * ft);
+        g.rotation.set(m.startR.x + m.ang.x * ft,
+          m.startR.y + m.ang.y * ft, m.startR.z + m.ang.z * ft);
+      }
+      if(introT >= INTRO_T) finishIntro();
+    }
+  }
+
   falling.update(dt);
   crtEffect.update(dt);
 
-  /* Hover affordance refresh: the devices sink continuously, so a
-     stationary pointer drifts on and off screens — re-test periodically. */
+  /* Hover affordance refresh: re-test periodically while orbiting. */
   hoverTick++;
-  if(!focused && hoverTick % 12 === 0 && lastHoverXY){
-    renderer.domElement.style.cursor = rayScreens(lastHoverXY) ? "pointer" : "default";
+  if(!focused && !camTween && hoverTick % 12 === 0 && lastHoverXY){
+    if(!orbitDrag || !orbitDrag.orbiting)
+      renderer.domElement.style.cursor =
+        (!falling.isFinalDrop() && rayScreens(lastHoverXY)) ? "pointer" : "default";
   }
 
   /* camera flights (screen focus transitions) */
@@ -1039,9 +1282,18 @@ function animate(){
     const k = easeIO(Math.min(1, camTween.t));
     camera.position.lerpVectors(camTween.p0, camTween.p1, k);
     _tgt.lerpVectors(camTween.t0, camTween.t1, k);
+    /* Focus travel never counts toward the revolution. */
+    prevAzimuth = azimuthOf();
     if(camTween.t >= 1){
       const done = camTween.done; camTween = null; done && done();
+      if(!focused) { syncOrbitFromCamera(); prevAzimuth = azimuthOf(); }
     }
+  } else if(!focused){
+    /* Sculpture / void navigation: the rig already placed the camera
+       on drag frames; holding still keeps it exactly where the viewer
+       left it (which is what watches the machines fall away). */
+    _tgt.copy(ORBIT_TGT);
+    noteAzimuthSample(azimuthOf());
   }
   camera.lookAt(_tgt);
 

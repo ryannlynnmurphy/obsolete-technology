@@ -52,6 +52,22 @@ export class FallingDevices {
     this.simClock = 0;
     this.acc = 0;
     this.stretchStart = -1;
+
+    /* Sculpture → final-drop lifecycle (driven by the page's orbit
+       tracker). While sculptureMode is true the bodies are held Fixed
+       in place as a composed sculpture. triggerFinalDrop() flips them
+       to Dynamic exactly where they are and disables wrap/slow-mo
+       forever. */
+    this.sculptureMode = true;
+    this.finalDrop = false;
+    /* While true, bodies never spawn — the page flies the visible
+       groups in by hand (fall-in intro) and releases the pause at the
+       exact freeze frame so physics takes over with zero snap. */
+    this.spawnPaused = false;
+  }
+
+  setSpawnPaused(paused) {
+    this.spawnPaused = paused;
   }
 
   async init(deviceDefinitions) {
@@ -61,7 +77,9 @@ export class FallingDevices {
     this.world.timestep = STEP;
 
     this.devices = deviceDefinitions.map((definition) => {
-      definition.object.visible = false;
+      /* During a hand-flown intro the groups stay visible the whole
+         way down; otherwise they hide until their body spawns. */
+      if (!this.spawnPaused) definition.object.visible = false;
       return { ...definition, body: null, spawned: false };
     });
 
@@ -99,6 +117,15 @@ export class FallingDevices {
       .setCcdEnabled(false);
 
     device.body = this.world.createRigidBody(bodyDesc);
+
+    /* Sculpture staging: hold the freshly spawned body exactly where
+       it was placed so the composition never drifts before release. */
+    if (this.sculptureMode && !this.finalDrop) {
+      device.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      device.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      device.body.setBodyType(RAPIER.RigidBodyType.Fixed, true);
+      device.sculptureHeld = true;
+    }
 
     /* Split mass across colliders by volume so compound
        bodies (open laptop lid, TV legs) weigh correctly. */
@@ -140,9 +167,34 @@ export class FallingDevices {
     this.simClock += dt;
 
     for (const device of this.devices) {
-      if (!device.spawned && this.simClock >= device.delay) {
+      if (!device.spawned && !this.spawnPaused && this.simClock >= device.delay) {
         this.spawnDevice(device);
       }
+    }
+
+    /* Final drop: pure gravity, no slow motion, no wrap. Bodies fall
+       away permanently from exactly where the sculpture released. */
+    if (this.finalDrop) {
+      this.world.timestep = STEP;
+      this.world.step();
+      return;
+    }
+
+    /* While the sculpture stands, hold every spawned body Fixed so the
+       composition never drifts (focus freeze/unfreeze must not release
+       it — only triggerFinalDrop does). */
+    if (this.sculptureMode) {
+      this.world.timestep = STEP;
+      for (const device of this.devices) {
+        if (!device.body || !device.spawned) continue;
+        if (device.body.bodyType() !== RAPIER.RigidBodyType.Fixed) {
+          device.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+          device.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+          device.body.setBodyType(RAPIER.RigidBodyType.Fixed, true);
+        }
+      }
+      this.world.step();
+      return;
     }
 
     /* The trigger: all in frame before time stretches. */
@@ -186,6 +238,13 @@ export class FallingDevices {
     const device = this.deviceByName(name);
     if (!device || !device.body) return;
     device.frozen = freeze;
+    /* After the final drop there is nothing to hold still — the void
+       keeps falling. Focus freezing must never resurrect the wrap or
+       re-suspend a released body. */
+    if (this.finalDrop) return;
+    /* While the sculpture stands, bodies stay Fixed no matter what
+       focus does; only triggerFinalDrop releases them. */
+    if (this.sculptureMode) return;
     if (freeze) {
       device.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
       device.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
@@ -193,6 +252,39 @@ export class FallingDevices {
     } else {
       device.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
     }
+  }
+
+  /* One-way release: the exact sculpture the user was examining loses
+     support. Bodies keep their current position/quaternion — no reset,
+     no respawn, no snap — and fall as independent dynamics with their
+     own mass/geometry. Never wraps again. Fires exactly once. */
+  triggerFinalDrop() {
+    if (this.finalDrop || !this.world) return false;
+    this.finalDrop = true;
+    this.sculptureMode = false;
+    this.stretchStart = -1;
+    this.world.timestep = STEP;
+    this.world.gravity.y = FULL_GRAVITY;
+    for (const device of this.devices) {
+      if (!device.body) continue;
+      device.frozen = false;
+      device.sculptureHeld = false;
+      /* Wake in place: preserve the release transform, restore a
+         convincing gravity response. TV keeps a harder pull than the
+         laptop via each device's own dropG; damping stays low so the
+         fall reads as sudden weight, not slow sink. */
+      const gravScale = (typeof device.dropG === "number") ? device.dropG : 1;
+      device.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
+      device.body.setGravityScale(gravScale, true);
+      device.body.setLinearDamping(0.05, true);
+      device.body.setAngularDamping(0.8, true);
+      device.body.wakeUp(true);
+    }
+    return true;
+  }
+
+  isFinalDrop() {
+    return this.finalDrop;
   }
 
   syncMeshes() {
