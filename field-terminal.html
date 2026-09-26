@@ -1,0 +1,1055 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Field Terminal 07</title>
+<style>
+  :root {
+    --bg: #070908;
+    --fg: #c9d0c8;
+    --dim: #697169;
+    --warn: #c9c0a4;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body, body * {
+    cursor: none !important;
+  }
+  html, body { width: 100%; height: 100%; margin: 0; }
+
+  body {
+    user-select: none;
+    -webkit-user-select: none;
+    overflow: hidden;
+    background: #000;
+    color: var(--fg);
+    font-family: "Courier New", Courier, monospace;
+  }
+
+  #screen {
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(circle at 50% 45%, rgba(255,255,255,.018), transparent 48%),
+      var(--bg);
+    padding: clamp(20px, 4vw, 48px);
+    overflow-y: auto;
+    scrollbar-width: none;
+    cursor: none;
+  }
+  #screen::-webkit-scrollbar { display: none; }
+
+  #screen::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    opacity: .12;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(255,255,255,.025) 0,
+      rgba(255,255,255,.025) 1px,
+      transparent 1px,
+      transparent 4px
+    );
+    mix-blend-mode: screen;
+  }
+
+  #terminal {
+    width: min(980px, 100%);
+    min-height: 100%;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: clamp(13px, 1.25vw, 17px);
+    line-height: 1.45;
+    letter-spacing: .02em;
+    text-shadow: 0 0 7px rgba(210, 230, 214, .12);
+    transition: font-size .25s ease, line-height .25s ease, width .25s ease, letter-spacing .25s ease;
+  }
+
+  body.flood-mode #terminal {
+    width: 100%;
+    max-width: none;
+    font-size: clamp(9px, 0.82vw, 12px);
+    line-height: 1.1;
+    letter-spacing: .02em;
+  }
+
+  body.flood-mode #screen {
+    padding: clamp(12px, 2vw, 20px);
+  }
+
+  body.flood-mode .line { min-height: 1.1em; }
+
+  .line { min-height: 1.45em; }
+  .dim { color: var(--dim); }
+  .warn { color: var(--warn); }
+  .signal { color: #d8ddd5; }
+  .hard { color: #eef1ea; }
+
+  #prompt-row {
+    display: flex;
+    align-items: baseline;
+    white-space: pre-wrap;
+  }
+
+  #prompt { flex: 0 0 auto; }
+  #typed { flex: 0 1 auto; min-width: 0; }
+
+  #cursor {
+    display: inline-block;
+    width: .62em;
+    height: 1.02em;
+    margin-left: 2px;
+    background: currentColor;
+    transform: translateY(.14em);
+    animation: blink 1s steps(1,end) infinite;
+  }
+
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .glyph {
+    display: block;
+    margin: .5em 0 .7em;
+    white-space: pre;
+    overflow: hidden;
+  }
+
+  .frame {
+    display: block;
+    margin: .6em 0 .8em;
+    white-space: pre;
+    text-align: center;
+    letter-spacing: .04em;
+  }
+
+  .flicker { animation: flicker .16s linear 2; }
+  @keyframes flicker {
+    0%,100% { opacity: 1; }
+    40% { opacity: .72; }
+    65% { opacity: .92; }
+  }
+
+  .takeover {
+    animation: takeover .12s linear 5;
+  }
+  @keyframes takeover {
+    0%,100% { transform: translateX(0); }
+    25% { transform: translateX(-1px); }
+    75% { transform: translateX(1px); }
+  }
+
+
+  body.signal-static #screen {
+    animation: terminal-shake .065s steps(2,end) infinite, terminal-tear .19s steps(2,end) infinite;
+    filter: contrast(1.35) brightness(1.12);
+  }
+
+  body.signal-static #terminal {
+    width: 100%;
+    max-width: none;
+    font-size: clamp(8px, .72vw, 11px);
+    line-height: 1.02;
+    letter-spacing: .015em;
+    animation: text-shear .055s steps(2,end) infinite;
+    text-shadow:
+      -1px 0 rgba(255,255,255,.20),
+       1px 0 rgba(190,220,255,.14),
+       0 0 8px rgba(255,255,255,.20);
+  }
+
+  body.signal-static #screen::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    pointer-events: none;
+    opacity: .88;
+    background:
+      repeating-linear-gradient(0deg, transparent 0 2px, rgba(255,255,255,.12) 2px 3px, transparent 3px 6px),
+      repeating-linear-gradient(90deg, transparent 0 43px, rgba(255,255,255,.045) 43px 45px),
+      radial-gradient(circle at 50% 50%, rgba(255,255,255,.05), transparent 60%);
+    mix-blend-mode: screen;
+    animation: static-slice .075s steps(2,end) infinite;
+  }
+
+  body.signal-static #screen::after {
+    opacity: .42;
+    background:
+      repeating-linear-gradient(to bottom,
+        rgba(255,255,255,.13) 0,
+        rgba(255,255,255,.13) 1px,
+        transparent 1px,
+        transparent 3px
+      );
+    animation: static-roll .16s linear infinite;
+  }
+
+  @keyframes terminal-shake {
+    0% { transform: translate(0,0); }
+    20% { transform: translate(-2px,1px); }
+    40% { transform: translate(2px,-1px); }
+    60% { transform: translate(-1px,-2px); }
+    80% { transform: translate(2px,1px); }
+    100% { transform: translate(0,0); }
+  }
+
+  @keyframes terminal-tear {
+    0%,100% { clip-path: inset(0 0 0 0); }
+    22% { clip-path: inset(2% 0 1% 0); }
+    47% { clip-path: inset(0 0 5% 0); }
+    73% { clip-path: inset(4% 0 0 0); }
+  }
+
+  @keyframes text-shear {
+    0%,100% { transform: skewX(0deg) translateX(0); }
+    35% { transform: skewX(-1deg) translateX(-2px); }
+    68% { transform: skewX(.8deg) translateX(2px); }
+  }
+
+  @keyframes static-slice {
+    0% { transform: translateY(-4px); opacity: .52; }
+    33% { transform: translateY(2px); opacity: .92; }
+    66% { transform: translateY(-1px); opacity: .68; }
+    100% { transform: translateY(4px); opacity: .82; }
+  }
+
+  @keyframes static-roll {
+    from { transform: translateY(-6px); }
+    to { transform: translateY(6px); }
+  }
+
+
+  body.after-signal #screen {
+    animation: none !important;
+    filter: none !important;
+    background: #020302;
+    padding: clamp(20px, 4vw, 48px);
+  }
+
+  body.after-signal #terminal {
+    width: min(980px, 100%);
+    max-width: 980px;
+    font-size: clamp(13px, 1.25vw, 17px);
+    line-height: 1.45;
+    letter-spacing: .02em;
+    animation: none !important;
+    transform: none !important;
+  }
+
+  body.after-signal #screen::before { display: none; }
+  body.after-signal #screen::after { opacity: .08; animation: none; }
+
+  body.final-black #screen {
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    padding: 0;
+    background: #000;
+  }
+
+  body.final-black #screen::before { display: none; }
+  body.final-black #screen::after { opacity: .045; animation: none; }
+
+  body.final-black #terminal {
+    width: 100%;
+    max-width: none;
+    min-height: 0;
+    text-align: center;
+    font-family: "Courier New", Courier, monospace;
+    font-size: clamp(13px, 1.25vw, 17px);
+    line-height: 1.45;
+    letter-spacing: .02em;
+    animation: none !important;
+    transform: none !important;
+    text-shadow: 0 0 7px rgba(210,230,214,.12);
+  }
+
+  .intrusion-line {
+    margin: .65em 0;
+    text-align: left;
+  }
+
+  .final-message {
+    width: 100%;
+    text-align: center;
+    white-space: nowrap;
+    font-family: "Courier New", Courier, monospace;
+    font-size: inherit;
+    line-height: inherit;
+    letter-spacing: inherit;
+    font-weight: 400;
+  }
+
+  @media (max-width: 700px) {
+    #screen { padding: 18px; }
+    #terminal { font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+  <main id="screen" aria-label="Field terminal">
+    <div id="terminal"></div>
+  </main>
+
+<script>
+(() => {
+  const terminal = document.getElementById('terminal');
+  const screen = document.getElementById('screen');
+
+  const state = {
+    cwd: '~',
+    buffer: '',
+    history: [],
+    historyIndex: 0,
+    commands: 0,
+    locked: true,
+    choosing: false,
+    ended: false,
+    takeoverStarted: false,
+    signalLevel: 0,
+    postSignal: false,
+    postBuffer: ''
+  };
+
+  const files = {
+    '~': ['notes.txt', 'archive/'],
+    '~/archive': ['manifest.txt', 'field-log-03.txt']
+  };
+
+  const contents = {
+    '~/notes.txt': `FIELD NOTE 07\nreceiver stable since 03:14.\nno response authorized.`,
+    '~/archive/manifest.txt': `ARCHIVE MANIFEST\n03 field logs\n02 checksum records\n01 receiver manual`,
+    '~/archive/field-log-03.txt': `03:14 carrier detected\n03:19 source unresolved\n03:22 passive observation continued\n\nCONTACT IS NOT ADVISED.`
+  };
+
+
+  const nearbyText = [
+    '[TEXT 11A / weak]  IF YOU CAN READ THIS: DO NOT ANSWER IT.',
+    '[TEXT 03C / 2.1 km]  WE OPENED THE CHANNEL ONCE. DO NOT REPEAT IT.',
+    '[TEXT 72F / moving]  DO NOT MAKE CONTACT. LET THE SIGNAL PASS.',
+    '[TEXT 19B / damaged]  IT IS NOT ASKING THE QUESTION YOU THINK IT IS ASKING.',
+    '[TEXT 44D / weak]  KEEP THE RECEIVER PASSIVE. DO NOT TRANSMIT.',
+    '[TEXT 08A / source unresolved]  IF IT STARTS DRAWING, SHUT THE TERMINAL DOWN.',
+    '[TEXT 61C / intermittent]  CLEAR DOES NOT MEAN SAFE. CLEAR MEANS IT CAN SEE YOU.',
+    '[TEXT ?? / collision]  DO NOT MAKE CONTACT DO NOT MAKE CONTACT DO NOT MAKE CON—'
+  ];
+
+  const glyph1 = `184.220104       184.220104\n     004.771994\n771.994103       771.994103\n     220.041880`;
+
+  const glyph2 = `        184.22\n    004.77 004.77\n        771.99\n    220.04 220.04\n        991.72`;
+
+  const glyph3 = `184.22     184.22     184.22\n   004.77 004.77\n771.99  220.04  771.99\n   004.77 004.77\n184.22     184.22     184.22`;
+
+  const flood = [
+    '184220104771994103004118442991720114',
+    '004771994       184220104       004771994',
+    '771994103   220041880   771994103',
+    '004771994       991720114       004771994',
+    '184220104771994103004118442991720114'
+  ].join('\n');
+
+  const glyphTokens = [
+    '184220104', '771994103', '004771994', '991720114', '220041880', 'A77X104',
+    'VY99172', 'MM22004', 'ZZ8801', 'OO7OO7', 'Q4A119', '3L3V3N', 'XI-004', '77A/9', '::::7'
+  ];
+
+  const glyphMatrices = [
+    [
+      [0,1,1,1,1,1,0],
+      [1,1,1,0,0,1,1],
+      [1,1,0,0,0,0,1],
+      [1,1,0,1,1,0,1],
+      [1,1,0,0,0,0,1],
+      [1,1,1,0,0,1,1],
+      [0,1,1,1,1,1,0]
+    ],
+    [
+      [0,0,1,1,1,0,0],
+      [0,1,1,1,1,1,0],
+      [1,1,0,1,1,0,1],
+      [1,1,1,1,1,1,1],
+      [1,1,0,1,1,0,1],
+      [0,1,1,1,1,1,0],
+      [0,0,1,1,1,0,0]
+    ],
+    [
+      [1,1,0,0,0,1,1],
+      [1,1,1,0,1,1,1],
+      [0,1,1,1,1,1,0],
+      [0,0,1,1,1,0,0],
+      [0,1,1,1,1,1,0],
+      [1,1,1,0,1,1,1],
+      [1,1,0,0,0,1,1]
+    ],
+    [
+      [0,1,1,0,1,1,0],
+      [1,1,1,1,1,1,1],
+      [1,1,0,1,1,0,1],
+      [1,1,1,1,1,1,1],
+      [1,1,0,1,1,0,1],
+      [1,1,1,1,1,1,1],
+      [0,1,1,0,1,1,0]
+    ],
+    [
+      [0,1,1,1,1,1,0],
+      [1,1,0,1,1,0,1],
+      [1,1,1,1,1,1,1],
+      [0,1,1,1,1,1,0],
+      [1,1,1,1,1,1,1],
+      [1,1,0,1,1,0,1],
+      [0,1,1,1,1,1,0]
+    ]
+  ];
+
+  const contactFrames = [
+`
+                    A77X104
+            004771994   004771994
+      771994103                     771994103
+  220041880                             220041880
+      991720114                     991720114
+            004771994   004771994
+                    A77X104
+`,
+`
+                       184220104
+                       184220104
+               004771994  004771994
+                    771994103
+                    771994103
+               220041880  220041880
+                    991720114
+                    991720114
+`,
+`
+            VY99172                 VY99172
+                 004771994   004771994
+                     771994103 771994103
+                         220041880
+                     771994103 771994103
+                 004771994   004771994
+            VY99172                 VY99172
+`,
+`
+                  184220104     184220104
+             004771994  771994103  004771994
+         220041880   991720114   991720114   220041880
+             004771994  771994103  004771994
+                  184220104     184220104
+`,
+`
+                            M11M11
+                    004771994 004771994
+              771994103   184220104   771994103
+         220041880   991720114   991720114   220041880
+              771994103   184220104   771994103
+                    004771994 004771994
+                            M11M11
+`,
+`
+               A77X104      004771994      A77X104
+           771994103      220041880      771994103
+               991720114  184220104  991720114
+           771994103      220041880      771994103
+               A77X104      004771994      A77X104
+`
+  ];
+
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  function add(text = '', cls = '') {
+    const div = document.createElement('div');
+    div.className = `line ${cls}`.trim();
+    div.textContent = text;
+    terminal.appendChild(div);
+    scrollBottom();
+    return div;
+  }
+
+  function addGlyph(text, cls = 'signal') {
+    const pre = document.createElement('div');
+    pre.className = `glyph ${cls}`;
+    pre.textContent = text;
+    terminal.appendChild(pre);
+    scrollBottom();
+    return pre;
+  }
+
+  function addFrame(text, cls = 'signal') {
+    const pre = document.createElement('div');
+    pre.className = `frame ${cls}`;
+    pre.textContent = text.replace(/^\n|\n$/g, '');
+    terminal.appendChild(pre);
+    scrollBottom();
+    return pre;
+  }
+
+  function blank() { add(''); }
+  function scrollBottom() { screen.scrollTop = screen.scrollHeight; }
+
+  function promptPath() {
+    return state.cwd === '~' ? '~' : state.cwd.replace('~/', '~/');
+  }
+
+  function removePrompt() {
+    const old = document.getElementById('prompt-row');
+    if (old) old.remove();
+  }
+
+  function showPrompt() {
+    if (state.locked || state.ended || state.choosing) return;
+    removePrompt();
+
+    const row = document.createElement('div');
+    row.id = 'prompt-row';
+
+    const prompt = document.createElement('span');
+    prompt.id = 'prompt';
+    prompt.textContent = `observer@field07:${promptPath()}$ `;
+
+    const typed = document.createElement('span');
+    typed.id = 'typed';
+    typed.textContent = state.buffer;
+
+    const cursor = document.createElement('span');
+    cursor.id = 'cursor';
+
+    row.append(prompt, typed, cursor);
+    terminal.appendChild(row);
+    scrollBottom();
+  }
+
+  function updateTyped() {
+    const typed = document.getElementById('typed');
+    if (typed) typed.textContent = state.buffer;
+  }
+
+  async function boot() {
+    await sleep(250);
+    add('FIELD TERMINAL 07', 'hard');
+    add('PASSIVE RECEIVER ACTIVE');
+    blank();
+    await sleep(260);
+    add('CLEAR.');
+    await sleep(180);
+    add('CLEAR.');
+    await sleep(180);
+    add('CLEAR.');
+    blank();
+    await sleep(320);
+    add('UNIDENTIFIED SIGNAL DETECTED.', 'warn flicker');
+    blank();
+    await sleep(320);
+    add('CONTACT IS NOT ADVISED.', 'warn');
+    add('DO NOT ENGAGE.', 'warn');
+    add('REPORT ALL SUSPICIOUS ACTIVITY.', 'warn');
+    blank();
+    state.locked = false;
+    showPrompt();
+  }
+
+  function resolvePath(name) {
+    if (!name) return '';
+    if (name.startsWith('/')) return name;
+    if (state.cwd === '~') return `~/${name}`;
+    return `${state.cwd}/${name}`;
+  }
+
+  async function execute(raw) {
+    const cmd = raw.trim();
+    state.commands++;
+
+    if (!cmd) return;
+
+    const [base, ...rest] = cmd.split(/\s+/);
+    const arg = rest.join(' ');
+
+    if (base === 'help') {
+      add('RECEIVER HELP', 'hard');
+      add('intercept     capture nearby text-band traffic');
+      add('scan          locate short-range carriers');
+      add('listen        hold receiver on strongest text carrier');
+      add('status        receiver / contact state');
+      add('ls cd cat pwd clear');
+      blank();
+      add('[TEXT 11A / weak]  IF YOU CAN READ THIS: DO NOT ANSWER IT.', 'warn flicker');
+    } else if (base === 'intercept') {
+      add('INTERCEPTING TEXT BAND...', 'dim');
+      await sleep(280);
+      add(nearbyText[Math.floor(Math.random() * nearbyText.length)], 'warn flicker');
+      await sleep(160);
+      if (Math.random() > .45) add(nearbyText[Math.floor(Math.random() * nearbyText.length)], 'warn');
+    } else if (base === 'scan') {
+      add('SHORT-RANGE TEXT CARRIERS: 04', 'dim');
+      await sleep(220);
+      add('[11A] weak     [03C] stable     [72F] moving     [??] collision', 'signal');
+      await sleep(180);
+      add('AUTO-INTERCEPT:', 'dim');
+      add(nearbyText[Math.floor(Math.random() * nearbyText.length)], 'warn flicker');
+    } else if (base === 'listen') {
+      add('HOLDING ON STRONGEST TEXT CARRIER...', 'dim');
+      await sleep(320);
+      add('[TEXT 03C / stable]  WE OPENED THE CHANNEL ONCE. DO NOT REPEAT IT.', 'warn');
+      await sleep(350);
+      add('[TEXT 03C]  WHATEVER IT SENDS BACK, DO NOT CALL IT A REPLY.', 'warn flicker');
+    } else if (base === 'status') {
+      add('RECEIVER ........ ACTIVE');
+      add('MODE ............ PASSIVE');
+      add('CONTACT ......... DISCOURAGED', 'warn');
+      add('TEXT CARRIERS ... PRESENT');
+    } else if (base === 'pwd') {
+      add(state.cwd.replace('~', '/home/observer'));
+    } else if (base === 'ls') {
+      add((files[state.cwd] || []).join('    '));
+    } else if (base === 'cd') {
+      if (!arg || arg === '~') state.cwd = '~';
+      else if (arg === '..') state.cwd = '~';
+      else if (arg === 'archive' && state.cwd === '~') state.cwd = '~/archive';
+      else add(`cd: ${arg}: no such directory`, 'dim');
+    } else if (base === 'cat') {
+      const path = resolvePath(arg);
+      if (contents[path]) add(contents[path]);
+      else add(`cat: ${arg || ''}: no such file`, 'dim');
+    } else if (base === 'clear') {
+      terminal.innerHTML = '';
+      state.signalLevel = Math.max(state.signalLevel, 3);
+      await sleep(260);
+      addGlyph(glyph2, 'signal flicker');
+      blank();
+    } else {
+      add(`${base}: unrecognized input`, 'dim');
+      add('try help', 'warn');
+    }
+
+    await maybeInterrupt(base);
+  }
+
+  async function maybeInterrupt(base) {
+    if (state.takeoverStarted) return;
+
+    if (state.commands === 2 && state.signalLevel < 1) {
+      state.signalLevel = 1;
+      await sleep(250);
+      blank();
+      add('184.220104 771.994103 004.118442', 'signal');
+      add('220.041880 770.004910 311.184220', 'signal');
+      blank();
+    }
+
+    if (state.commands === 4 && state.signalLevel < 2) {
+      state.signalLevel = 2;
+      await sleep(220);
+      addGlyph(glyph1);
+      blank();
+    }
+
+    if (state.commands === 5 && state.signalLevel < 3) {
+      state.signalLevel = 3;
+      await sleep(180);
+      addGlyph(glyph2, 'signal flicker');
+      blank();
+    }
+
+    if (state.commands >= 7 || (base === 'clear' && state.commands >= 5)) {
+      await sleep(350);
+      beginTakeover();
+    }
+  }
+
+  async function beginTakeover() {
+    if (state.takeoverStarted) return;
+    state.takeoverStarted = true;
+    state.locked = true;
+    removePrompt();
+    blank();
+    addGlyph(glyph3, 'signal takeover');
+    await sleep(500);
+    add('SIGNAL OVERRIDE', 'hard flicker');
+    await sleep(350);
+    addGlyph(flood, 'signal takeover');
+    await sleep(850);
+
+    terminal.innerHTML = '';
+    await sleep(650);
+    add('UNIDENTIFIED TRANSMISSION STABLE.', 'hard');
+    await sleep(700);
+    blank();
+    add('CONTACT REMAINS DISCOURAGED.', 'warn');
+    await sleep(850);
+    blank();
+
+    state.choosing = true;
+    state.buffer = '';
+    add('MAKE CONTACT? [y/N]', 'hard');
+    add('');
+    showChoicePrompt();
+  }
+
+  function showChoicePrompt() {
+    removePrompt();
+    const row = document.createElement('div');
+    row.id = 'prompt-row';
+
+    const prompt = document.createElement('span');
+    prompt.id = 'prompt';
+    prompt.textContent = '> ';
+
+    const typed = document.createElement('span');
+    typed.id = 'typed';
+    typed.textContent = state.buffer;
+
+    const cursor = document.createElement('span');
+    cursor.id = 'cursor';
+
+    row.append(prompt, typed, cursor);
+    terminal.appendChild(row);
+    scrollBottom();
+  }
+
+  function randToken(offset = 0) {
+    return glyphTokens[(Math.floor(Math.random() * glyphTokens.length) + offset) % glyphTokens.length];
+  }
+
+  function buildCascadeLine(widthHint = 14, offset = 0) {
+    const parts = [];
+    for (let i = 0; i < widthHint; i++) {
+      const spacer = Math.random() > 0.9 ? '  ' : ' ';
+      parts.push(randToken(offset + i).padEnd(9, ' ') + spacer);
+    }
+    return parts.join('').trimEnd();
+  }
+
+  function buildGlyphField(frameIndex = 0) {
+    const matrix = glyphMatrices[frameIndex % glyphMatrices.length];
+    let tokenIndex = 0;
+
+    return matrix.map((row, rowIndex) => {
+      return row.map((cell, colIndex) => {
+        if (!cell) return ' '.repeat(10);
+        const token = randToken(frameIndex + tokenIndex + rowIndex + colIndex);
+        tokenIndex += 1;
+        return token.padEnd(9, ' ');
+      }).join(' ');
+    }).join('\n');
+  }
+
+  async function cascadeContact() {
+    document.body.classList.add('flood-mode');
+    terminal.innerHTML = '';
+
+    add('RESPONSE INBOUND.', 'hard flicker');
+    add('PATTERN ESCALATION DETECTED.', 'warn');
+    blank();
+
+    const waveCount = 72;
+    for (let i = 0; i < waveCount; i++) {
+      if (i % 9 === 0 && i !== 0) {
+        addFrame(buildGlyphField(i), i % 18 === 0 ? 'hard flicker' : 'signal');
+      } else if (i % 13 === 0) {
+        addFrame(contactFrames[Math.floor(i / 13) % contactFrames.length], 'signal');
+      } else {
+        add(buildCascadeLine(18 + (i % 8), i), i % 5 === 0 ? 'hard' : 'signal');
+      }
+      await sleep(Math.max(16, 68 - i));
+    }
+
+    await sleep(140);
+    terminal.innerHTML = '';
+
+    const fullFlood = 110;
+    for (let i = 0; i < fullFlood; i++) {
+      if (i % 11 === 0) {
+        addFrame(buildGlyphField(i + 40), i % 22 === 0 ? 'hard flicker' : 'signal');
+      } else if (i % 17 === 0) {
+        addFrame(contactFrames[Math.floor(i / 17) % contactFrames.length], 'hard');
+      } else {
+        add(buildCascadeLine(24 + (i % 10), i + 30), i % 4 === 0 ? 'hard' : 'signal');
+      }
+      await sleep(Math.max(8, 34 - Math.floor(i / 7)));
+    }
+
+    blank();
+    addFrame(buildGlyphField(200), 'hard flicker');
+    add('/// CHANNEL OPEN ///', 'hard flicker');
+  }
+
+  function removeSignalClasses() {
+    document.body.classList.remove('signal-static', 'flood-mode', 'takeover');
+    document.body.classList.add('after-signal');
+  }
+
+  function showPostSignalPrompt() {
+    terminal.innerHTML = '';
+    const row = document.createElement('div');
+    row.id = 'prompt-row';
+
+    const prompt = document.createElement('span');
+    prompt.id = 'prompt';
+    prompt.textContent = 'observer@field07:~$ ';
+
+    const typed = document.createElement('span');
+    typed.id = 'typed';
+    typed.textContent = state.postBuffer;
+
+    const cursor = document.createElement('span');
+    cursor.id = 'cursor';
+
+    row.append(prompt, typed, cursor);
+    terminal.appendChild(row);
+    scrollBottom();
+  }
+
+  async function finishIntrusion() {
+    if (!state.postSignal) return;
+    state.postSignal = false;
+    state.locked = true;
+
+    const typed = document.getElementById('typed');
+    if (typed) {
+      await sleep(180);
+      typed.textContent = '';
+    }
+    await sleep(420);
+    removePrompt();
+    terminal.innerHTML = '';
+    add("YOU DON'T HAVE TO TYPE.", 'hard intrusion-line');
+    await sleep(1050);
+    add('WE HEARD YOU.', 'hard intrusion-line flicker');
+    await sleep(1700);
+
+    document.body.classList.remove('after-signal');
+    document.body.classList.add('final-black');
+    terminal.innerHTML = '';
+    await sleep(1350);
+
+    const final = document.createElement('div');
+    final.className = 'final-message hard';
+    final.textContent = 'LOOK AROUND YOU.';
+    terminal.appendChild(final);
+    state.ended = true;
+  }
+
+  async function postStaticSequence() {
+    removeSignalClasses();
+    terminal.innerHTML = '';
+    await sleep(500);
+
+    add("WE'RE IN YOUR HEAD.", 'hard flicker');
+    await sleep(1450);
+    blank();
+    add("DON'T WORRY.", 'hard');
+    await sleep(1450);
+    blank();
+    add('EVERYTHING WILL BE OKAY.', 'hard flicker');
+    await sleep(1900);
+
+    terminal.innerHTML = '';
+    await sleep(650);
+    state.postBuffer = '';
+    state.postSignal = true;
+    state.locked = false;
+    showPostSignalPrompt();
+  }
+
+  function staticLine(seed = 0) {
+    const fragments = [
+      '184220104','004771994','771994103','991720114','220041880','A77X104','XI-004',
+      '::::7','/////','\\\\','▓▓▓','▒▒▒','░░░','000000','111111','NOISE','NULL','CARRIER'
+    ];
+    let out = '';
+    for (let i = 0; i < 28 + (seed % 18); i++) {
+      const piece = fragments[Math.floor(Math.random() * fragments.length)];
+      out += piece + (Math.random() > .9 ? '  ' : ' ');
+    }
+    return out;
+  }
+
+  async function overwhelmWithStatic(label) {
+    document.body.classList.add('signal-static');
+    document.body.classList.add('flood-mode');
+
+    if (label) {
+      add(label, 'hard flicker');
+      await sleep(180);
+    }
+
+    for (let i = 0; i < 42; i++) {
+      add(staticLine(i), i % 3 === 0 ? 'hard flicker' : 'signal');
+      if (i % 7 === 0) addFrame(buildGlyphField(i + 260), 'signal flicker');
+      if (terminal.children.length > 48) terminal.removeChild(terminal.children[0]);
+      await sleep(Math.max(10, 52 - i));
+    }
+
+    terminal.innerHTML = '';
+
+    for (let i = 0; i < 72; i++) {
+      add(staticLine(i + 50), i % 4 === 0 ? 'hard' : 'signal');
+      if (i % 9 === 0) addFrame(buildGlyphField(i + 330), 'hard flicker');
+      if (terminal.children.length > 54) terminal.removeChild(terminal.children[0]);
+      await sleep(Math.max(6, 24 - Math.floor(i / 6)));
+    }
+
+    await sleep(320);
+    await postStaticSequence();
+  }
+
+  async function choose(value) {
+    state.choosing = false;
+    state.locked = true;
+    removePrompt();
+
+    const v = value.trim().toLowerCase();
+    if (v === 'y' || v === 'yes') {
+      add('> y');
+      blank();
+      await sleep(350);
+      add('OPENING CHANNEL...', 'hard');
+      await sleep(420);
+      add('TRANSMISSION SENT.', 'hard');
+      await sleep(420);
+      add('RESPONSE INBOUND.', 'warn flicker');
+      await sleep(280);
+      await overwhelmWithStatic('SIGNAL SATURATION');
+    } else if (v === '' || v === 'n' || v === 'no') {
+      add(`> ${v || 'n'}`);
+      blank();
+      await sleep(350);
+      add('ABORT REQUEST SENT.', 'hard');
+      await sleep(420);
+      add('RECEIVER DISCONNECT...', 'warn');
+      await sleep(420);
+      add('SIGNAL PERSISTS.', 'warn flicker');
+      await sleep(280);
+      await overwhelmWithStatic('SIGNAL SATURATION');
+    } else {
+      add(`> ${v}`, 'dim');
+      add('INVALID RESPONSE. ENTER y OR n.', 'warn');
+      blank();
+      state.choosing = true;
+      state.locked = false;
+      state.buffer = '';
+      showChoicePrompt();
+    }
+  }
+
+  async function submit() {
+    if (state.locked && !state.choosing) return;
+
+    const value = state.buffer;
+    state.buffer = '';
+
+    if (state.choosing) {
+      await choose(value);
+      return;
+    }
+
+    const row = document.getElementById('prompt-row');
+    if (row) {
+      const committed = document.createElement('div');
+      committed.className = 'line';
+      committed.textContent = `observer@field07:${promptPath()}$ ${value}`;
+      row.replaceWith(committed);
+    }
+
+    state.history.push(value);
+    state.historyIndex = state.history.length;
+    state.locked = true;
+    await execute(value);
+
+    if (!state.takeoverStarted) {
+      state.locked = false;
+      showPrompt();
+    }
+  }
+
+  // Sculpture bridge: Esc steps back out to orbit, every keypress flashes
+  // the 3D laptop keys via postMessage (parent listens for these).
+  function postToParent(msg) {
+    try { window.parent.postMessage(msg, '*'); } catch {}
+  }
+
+  document.addEventListener('keydown', async (e) => {
+    if (e.key === 'Escape') {
+      postToParent({ type: 'softie-os', action: 'exit-screen' });
+      return;
+    }
+    if (!e.ctrlKey && !e.metaKey && !e.altKey && e.code) {
+      postToParent({ type: 'field-terminal-flash', code: e.code });
+    }
+    if (state.ended) return;
+
+    if (state.postSignal) {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key === 'Backspace') {
+        e.preventDefault();
+        state.postBuffer = state.postBuffer.slice(0, -1);
+        const typed = document.getElementById('typed');
+        if (typed) typed.textContent = state.postBuffer;
+        return;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (state.postBuffer.length > 0) await finishIntrusion();
+        return;
+      }
+      if (e.key.length === 1) {
+        e.preventDefault();
+        state.postBuffer += e.key;
+        const typed = document.getElementById('typed');
+        if (typed) typed.textContent = state.postBuffer;
+        if (state.postBuffer.length >= 2) await finishIntrusion();
+      }
+      return;
+    }
+
+    if (state.locked && !state.choosing) return;
+
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      await submit();
+      return;
+    }
+
+    if (e.key === 'Backspace') {
+      e.preventDefault();
+      state.buffer = state.buffer.slice(0, -1);
+      updateTyped();
+      return;
+    }
+
+    if (!state.choosing && e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!state.history.length) return;
+      state.historyIndex = Math.max(0, state.historyIndex - 1);
+      state.buffer = state.history[state.historyIndex] ?? '';
+      updateTyped();
+      return;
+    }
+
+    if (!state.choosing && e.key === 'ArrowDown') {
+      e.preventDefault();
+      state.historyIndex = Math.min(state.history.length, state.historyIndex + 1);
+      state.buffer = state.history[state.historyIndex] ?? '';
+      updateTyped();
+      return;
+    }
+
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key.length === 1) {
+      if (state.choosing && state.buffer.length >= 3) return;
+      state.buffer += e.key;
+      updateTyped();
+    }
+  });
+
+  screen.addEventListener('click', () => window.focus());
+  document.addEventListener('contextmenu', (e) => e.preventDefault());
+  document.addEventListener('dragstart', (e) => e.preventDefault());
+  boot();
+})();
+</script>
+</body>
+</html>

@@ -753,6 +753,30 @@ gameObj.position.set(-0.18, 0.25, 1.826);
 gameObj.visible = false;
 crt.group.add(gameObj);
 
+/* Field terminal on the laptop lid: full-bleed live page mapped onto
+   the laptop display quad. Parented to the display mesh so it rides
+   the lid tilt; 1024x560 matches OS_W/OS_H (aspect 1.828 vs 1.825).
+   Click-through everywhere except when focused (see animate loop). */
+const LAPTOP_OS_W = 1024, LAPTOP_OS_H = 560;
+const laptopDiv = document.createElement("div");
+laptopDiv.style.width = LAPTOP_OS_W + "px";
+laptopDiv.style.height = LAPTOP_OS_H + "px";
+laptopDiv.style.position = "relative";
+laptopDiv.style.pointerEvents = "none";
+laptopDiv.style.overflow = "hidden";
+const laptopFrame = document.createElement("iframe");
+laptopFrame.src = "field-terminal.html?sculpture=1";
+laptopFrame.style.width = LAPTOP_OS_W + "px";
+laptopFrame.style.height = LAPTOP_OS_H + "px";
+laptopFrame.style.border = "0";
+laptopFrame.style.display = "block";
+laptopDiv.appendChild(laptopFrame);
+const laptopObj = new CSS3DObject(laptopDiv);
+laptopObj.scale.set(5.75/LAPTOP_OS_W, 3.15/LAPTOP_OS_H, 1);
+laptopObj.position.set(0, 0, 0.006);
+laptopObj.visible = false;
+lap.display.add(laptopObj);
+
 /* Collider quats in flight space (account for inner offsets:
    laptop base yaw -18°, lid = yaw(-18°) * tilt(-12°)). */
 const _ce = new THREE.Euler(), _cq = new THREE.Quaternion();
@@ -1088,16 +1112,16 @@ function enterFocus(name){
   savedOrbitTgt = _tgt.clone();
   orbitDrag = null;
   exitBtn.classList.add("show");
-  // The laptop draws its own cursor in-texture, so the system arrow hides
-  // and the virtual cursor IS the mouse immediately. CRT/TV keep the arrow:
-  // Softie's iframe provides the cursor over its screen, the TV has none.
-  renderer.domElement.style.cursor = name === "laptop" ? "none" : "default";
+  // Both iframes (Softie on CRT, field terminal on laptop) provide
+  // their own cursor; the outer canvas keeps the system arrow.
+  renderer.domElement.style.cursor = "default";
   let mesh, w, h;
   if(name==="crt"){ mesh=crt.display; w=crt.screenW*CRT_S; h=crt.screenH*CRT_S;
     if(!crt.S.power){ crt.togglePower(); }
     computer.enterComputerMode(); }
   if(name==="laptop"){ mesh=lap.display; w=lap.screenW*LAP_S; h=lap.screenH*LAP_S;
-    lap.cursorActive = true; }
+    lap.cursorActive = false; lap.winDragging = false;
+    laptopComputer.enterComputerMode(); }
   if(name==="tv"){ mesh=tvd.innerScreen; w=tvd.screenW*TV_S; h=tvd.screenH*TV_S;
     if(!tvd.powered){ tvd.togglePower(); } }
   const pose = computeFocusPose(mesh, w, h);
@@ -1113,6 +1137,7 @@ function exitFocus(){
   falling.setFrozen("laptop", false);
   falling.setFrozen("tv", false);
   if(focused==="laptop"){ lap.cursorActive = false; lap.winDragging = false; }
+  const wasLaptop = focused === "laptop";
   focused = null;
   exitBtn.classList.remove("show");
   renderer.domElement.style.cursor = "default";
@@ -1123,6 +1148,7 @@ function exitFocus(){
   savedOrbitPos = null; savedOrbitTgt = null;
   tweenCamTo(backP, backT, 1.25, ()=>{ syncOrbitFromCamera(); prevAzimuth = azimuthOf(); });
   computer.exitComputerMode();
+  if(wasLaptop) laptopComputer.exitComputerMode();
 }
 exitBtn.addEventListener("click", exitFocus);
 
@@ -1131,6 +1157,15 @@ exitBtn.addEventListener("click", exitFocus);
    Esc inside Softie posts exit-screen → the bridge steps back out. */
 const crtEffect = createSoftieCRTEffect({ THREE, screenMesh: crt.display, camera });
 const computer = wireSoftieOS({ iframe: gameFrame, crtEffect, onExit: () => exitFocus() });
+/* Field terminal on the laptop: same exit-screen contract (Esc inside
+   the terminal posts to the parent), plus per-key 3D key-dip flashes. */
+const laptopComputer = wireSoftieOS({ iframe: laptopFrame, onExit: () => exitFocus() });
+addEventListener("message", (e)=>{
+  const m = e?.data;
+  if(m && m.type === "field-terminal-flash" && typeof m.code === "string"){
+    lap.flashKey(m.code);
+  }
+});
 addEventListener("keydown", (e)=>{
   if(e.key === "Escape"){
     if(focused){ exitFocus(); return; }
@@ -1147,10 +1182,9 @@ addEventListener("keydown", (e)=>{
     return;
   }
   if(focused === "laptop" && !e.metaKey && !e.ctrlKey && !e.altKey){
+    // Terminal owns typing (iframe focused); outer page only dips the 3D keys.
     lap.flashKey(e.code);
     const m = lap.keyByCode[e.code]; if(m) m.userData.held = true;
-    if(e.code === "Backspace") lap.typeKey("back");
-    else if(e.key && e.key.length === 1) lap.typeKey(e.key);
     if(e.key === " " || e.key === "Tab") e.preventDefault();
   }
 });
@@ -1160,14 +1194,8 @@ addEventListener("keyup", (e)=>{
 
 renderer.domElement.addEventListener("pointerdown", (e)=>{
   if(focused){
-    /* laptop window title drag while inside */
-    if(focused === "laptop"){
-      const c = lap.cursor;
-      if(lap.windowOpen && lap.inTitle(c.x, c.y) && !lap.inClose(c.x, c.y)){
-        lap.winDragging = true;
-        lap.setWinGrab(lap.WIN.x - c.x, lap.WIN.y - c.y);
-      }
-    }
+    /* Both overlay pages (CRT + laptop terminal) handle their own input;
+       nothing to do on the outer canvas while inside. */
     return;
   }
   if(camTween || !sculptureReady) return;
@@ -1186,18 +1214,8 @@ renderer.domElement.addEventListener("pointerdown", (e)=>{
   downInfo = null;
 });
 renderer.domElement.addEventListener("pointermove", (e)=>{
-  if(focused === "laptop"){
-    /* drive the virtual cursor from the real pointer via screen UV */
-    setPtr(e); _ray.setFromCamera(_ptr, camera);
-    const hit = _ray.intersectObject(lap.display, false)[0];
-    if(hit && hit.uv){
-      const c = lap.cursor;
-      c.x = THREE.MathUtils.clamp(hit.uv.x*lap.OS_W, 0, lap.OS_W);
-      c.y = THREE.MathUtils.clamp((1-hit.uv.y)*lap.OS_H, 0, lap.OS_H);
-      if(lap.winDragging){ lap.setWIN(c.x+lap.winGrab.dx, c.y+lap.winGrab.dy); }
-    }
-    return;
-  }
+  // Overlay pages own the pointer while focused; the laptop terminal
+  // needs no virtual-cursor driving.
   if(focused) return;
   if(orbitDrag && !camTween && e.buttons){
     const totalMoved = Math.hypot(e.clientX-orbitDrag.x0, e.clientY-orbitDrag.y0);
@@ -1228,20 +1246,12 @@ renderer.domElement.addEventListener("pointerup", (e)=>{
   if(!wasOrbiting) renderer.domElement.style.cursor = "default";
   if(focused){
     /* clicks while inside go to the device OS.
-       The CRT runs the overlay page itself — only its physical
-       power button is handled here. */
+       CRT + laptop run overlay pages themselves — only physical
+       buttons are handled here (CRT power). */
     if(focused === "crt"){
       setPtr(e); _ray.setFromCamera(_ptr, camera);
       if(_ray.intersectObject(crt.powerButton, false).length){ crt.togglePower(); return; }
       if(!crt.S.power){ crt.togglePower(); return; }
-    }else if(focused === "laptop"){
-      const c = lap.cursor;
-      if(lap.windowOpen){
-        if(lap.inClose(c.x,c.y)){ lap.handleVirtualClick(c.x,c.y); return; }
-        if(lap.inTitle(c.x,c.y)){ return; }
-        return;
-      }
-      lap.handleVirtualClick(c.x, c.y);
     }else if(focused === "tv"){
       setPtr(e); _ray.setFromCamera(_ptr, camera);
       if(_ray.intersectObject(tvd.powerDial, true).length){ tvd.togglePower(); }
@@ -1322,6 +1332,7 @@ let uiTick = 0;
 let hoverTick = 0;
 let occlTick = 0;
 let screenBlocked = false;
+let laptopBlocked = false;
 document.addEventListener("visibilitychange", ()=>{ hidden = document.hidden; });
 
 /* Frame the sculpture on load: pull the orbit rig onto the composed
@@ -1456,6 +1467,26 @@ function animate(){
   gameObj.visible = crt.S.power && screenFacing > 0.12 && !screenBlocked;
   gameDiv.style.pointerEvents = (focused === "crt") ? "auto" : "none";
   crt.display.visible = false;
+
+  /* Laptop field terminal: same contract — hide when facing away or
+     occluded so the page never floats over the back/side of the lid.
+     The canvas OS stays as dark backing behind the opaque iframe. */
+  lap.display.getWorldPosition(_sv1);
+  lap.display.getWorldQuaternion(_sq1);
+  _sv2.set(0, 0, 1).applyQuaternion(_sq1);
+  _sv3.copy(camera.position).sub(_sv1).normalize();
+  const laptopFacing = _sv2.dot(_sv3);
+  if(laptopFacing > 0.12 && occlTick % 6 === 0){
+    _sv3.copy(_sv1).sub(camera.position);
+    const lapDist = _sv3.length();
+    _ray.set(camera.position, _sv3.normalize());
+    _ray.far = lapDist + 1.0;
+    const lapHits = _ray.intersectObjects([tvFlight, lapFlight, crtFlight], true);
+    laptopBlocked = !(lapHits.length && (lapHits[0].object === lap.display || lap.display.children.includes(lapHits[0].object)));
+    _ray.far = Infinity;
+  }
+  laptopObj.visible = laptopFacing > 0.12 && !laptopBlocked;
+  laptopDiv.style.pointerEvents = (focused === "laptop") ? "auto" : "none";
 
   renderer.render(scene, camera);
   cssRenderer.render(scene, camera);
