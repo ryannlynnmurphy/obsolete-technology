@@ -97,6 +97,8 @@ scene.add(underFill);
 /* Reused temps — never allocate inside the loop */
 const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
 const _v4 = new THREE.Vector3();
+const _sv1 = new THREE.Vector3(), _sv2 = new THREE.Vector3(), _sv3 = new THREE.Vector3();
+const _sq1 = new THREE.Quaternion();
 const _ray = new THREE.Raycaster(), _ptr = new THREE.Vector2();
 
 /* ============================================================
@@ -1288,6 +1290,15 @@ window.__sculpture = {
         type: d.body ? d.body.bodyType() : null })) };
   },
   drop(){ if(!sculptureReady) finishIntro(); fireOrbitComplete(); return falling.isFinalDrop(); },
+  behind(){
+    /* console-only test jump: camera to the opposite side so the facing
+       guard can be verified (overlay must hide). Resets the revolution
+       tracker so the jump never counts toward release. */
+    orbitTheta += Math.PI; applyOrbitToCamera(); _tgt.copy(ORBIT_TGT);
+    camera.lookAt(_tgt); syncOrbitFromCamera(); prevAzimuth = azimuthOf();
+    coherentTotal = 0; dominantDir = 0; visitedSectors = new Set([sectorOf(prevAzimuth)]);
+    return { azimuth: +azimuthOf().toFixed(3), overlay: gameObj.visible };
+  },
   verify(){ return verifyOrbit360(); },
   frozen(){
     if(!frozenAuthority.captured) captureFrozenAuthority();
@@ -1309,6 +1320,8 @@ let hidden = false;
 let staticAcc = 0;
 let uiTick = 0;
 let hoverTick = 0;
+let occlTick = 0;
+let screenBlocked = false;
 document.addEventListener("visibilitychange", ()=>{ hidden = document.hidden; });
 
 /* Frame the sculpture on load: pull the orbit rig onto the composed
@@ -1419,8 +1432,28 @@ function animate(){
 
   /* the CRT belongs to the game page: overlay on while powered,
      canvas display stays dark glass behind it.
-     Click-through until focused, playable once inside. */
-  gameObj.visible = crt.S.power;
+     The overlay is a DOM plane with no depth occlusion, so it must
+     hide when the screen faces away — otherwise the game floats over
+     the back/side of the monitor while orbiting. It must also hide
+     when another chassis sits between camera and screen (e.g. looking
+     through the TV from below) — tested with a throttled occlusion
+     ray against the real geometry. */
+  crt.display.getWorldPosition(_sv1);
+  crt.display.getWorldQuaternion(_sq1);
+  _sv2.set(0, 0, 1).applyQuaternion(_sq1);
+  _sv3.copy(camera.position).sub(_sv1).normalize();
+  const screenFacing = _sv2.dot(_sv3);
+  occlTick++;
+  if(screenFacing > 0.12 && occlTick % 6 === 0){
+    _sv3.copy(_sv1).sub(camera.position);
+    const screenDist = _sv3.length();
+    _ray.set(camera.position, _sv3.normalize());
+    _ray.far = screenDist + 1.0;
+    const occlHits = _ray.intersectObjects([tvFlight, lapFlight, crtFlight], true);
+    screenBlocked = !(occlHits.length && occlHits[0].object === crt.display);
+    _ray.far = Infinity;
+  }
+  gameObj.visible = crt.S.power && screenFacing > 0.12 && !screenBlocked;
   gameDiv.style.pointerEvents = (focused === "crt") ? "auto" : "none";
   crt.display.visible = false;
 
