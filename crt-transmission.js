@@ -190,7 +190,7 @@ export function createCRTTransmission({ screenMesh, parent } = {}) {
         gl_FragColor = vec4(col,1.0);
       }
     `,
-  };
+  });
 
   // Swap the dark-glass material for the transmission material at boot.
   // The mesh stays invisible until activate() — dark/inactive before contact.
