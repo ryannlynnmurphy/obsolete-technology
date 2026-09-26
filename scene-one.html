@@ -133,7 +133,7 @@ function buildCRT(){
 
   add(new THREE.Mesh(new RoundedBoxGeometry(4.2,.47,.19,6,.07),plasticShadow),.15,-1.65,1.65);
   const powerButton = add(new THREE.Mesh(new RoundedBoxGeometry(.48,.3,.22,4,.045),darkPlastic),1.75,-1.65,1.81);
-  const led = new THREE.Mesh(new THREE.SphereGeometry(.065,20,20),ledOff);
+  const led = new THREE.Mesh(new THREE.SphereGeometry(.065,20,20),ledOn);
   led.position.set(1.35,-1.65,1.81); group.add(led);
 
   for(const s of [-1,1]) for(let i=0;i<9;i++){
@@ -147,9 +147,8 @@ function buildCRT(){
   add(new THREE.Mesh(new RoundedBoxGeometry(1.45,.85,1.25,6,.18),plastic),0,-2.55,-.1);
   add(new THREE.Mesh(new RoundedBoxGeometry(3.7,.42,2.6,8,.18),plastic),0,-3.08,.05);
 
-  /* The CRT is dark/inactive until the laptop establishes contact —
-     then it permanently carries the alien transmission (see below). */
-  const S = {power:false};
+  /* Softie owns the CRT until the laptop establishes contact. */
+  const S = {power:true};
   function drawScreen(t){
     const W=640,H=480;
     g.fillStyle="#0b0b0c";g.fillRect(0,0,W,H);
@@ -754,7 +753,7 @@ gameObj.position.set(-0.18, 0.25, 1.826);
 gameObj.visible = false;
 crt.group.add(gameObj);
 
-/* Alien transmission on the CRT screen mesh. Dark/inactive until the
+/* Alien transmission on the CRT screen mesh. Inactive until the
    laptop's MAKE CONTACT? Y succeeds; then permanent for this scene.
    The only reset is tearing down the whole scene (chapter cut). */
 const crtTransmission = createCRTTransmission({
@@ -765,7 +764,7 @@ function onAlienContactEstablished(){
   /* Signal propagation beat: the laptop finishes first, then ~380ms
      later the CRT suddenly receives it. Total ~0.5s after YES. */
   setTimeout(() => {
-    crt.togglePower(); /* LED on — the set wakes up */
+    if(!crt.S.power) crt.togglePower(); /* signal wakes a powered-off set */
     crtTransmission.activate();
   }, 380);
 }
@@ -1118,7 +1117,7 @@ function setPtr(e){
 }
 function rayScreens(e){
   setPtr(e); _ray.setFromCamera(_ptr, camera);
-  /* CRT is never interactive — the laptop is the interaction device. */
+  if(!crtTransmission.active && _ray.intersectObject(crt.display, false).length) return "crt";
   if(_ray.intersectObject(lap.display, false).length) return "laptop";
   if(_ray.intersectObjects([tvd.glass, tvd.innerScreen], false).length) return "tv";
   return null;
@@ -1230,10 +1229,13 @@ renderer.domElement.addEventListener("pointerdown", (e)=>{
      instead become a click. The 6px threshold decides on move/up. */
   orbitDrag = {x0:e.clientX, y0:e.clientY, lx:e.clientX, ly:e.clientY, orbiting:false};
   if(falling.isFinalDrop()){ downInfo = null; return; }
-  /* click a screen to step inside (laptop / tv only — the CRT is not
-     interactive and carries no UI) */
+  /* Click a screen to step inside. The CRT belongs to Softie until contact. */
   const scr = rayScreens(e);
   if(scr){ downInfo = {x:e.clientX, y:e.clientY, kind:"focus", screen:scr}; return; }
+  setPtr(e); _ray.setFromCamera(_ptr, camera);
+  if(!crtTransmission.active && _ray.intersectObject(crt.group, true).length){
+    downInfo = {x:e.clientX, y:e.clientY, kind:"focus", screen:"crt"}; return;
+  }
   downInfo = null;
 });
 renderer.domElement.addEventListener("pointermove", (e)=>{
@@ -1488,11 +1490,10 @@ function animate(){
     screenBlocked = !(occlHits.length && occlHits[0].object === crt.display);
     _ray.far = Infinity;
   }
-  /* CRT overlay stays off once the transmission owns the screen — the
-     glyph signal is the screen now, permanently. Before contact the set
-     is dark (power false), so the overlay never shows either. */
+  /* Softie owns the CRT before contact; the glyph signal takes over
+     permanently once the laptop establishes contact. */
   gameObj.visible = !crtTransmission.active && crt.S.power && screenFacing > 0.12 && !screenBlocked;
-  gameDiv.style.pointerEvents = (focused === "crt") ? "auto" : "none";
+  gameDiv.style.pointerEvents = (!crtTransmission.active && focused === "crt") ? "auto" : "none";
   if(!crtTransmission.active) crt.display.visible = false;
 
   /* Laptop field terminal: same contract — hide when facing away or
