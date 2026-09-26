@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Scene 2 — UFO Flyby (separate from obsolete-technology)</title>
 <link rel="icon" href="data:," />
+<link
+  href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap"
+  rel="stylesheet"
+/>
 <style>
   html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#060708;font-family:system-ui,sans-serif}
   canvas{display:block}
@@ -16,6 +20,52 @@
   #replay{position:fixed;right:18px;bottom:14px;z-index:10;display:none;
     background:#e8edf3;color:#0b0e13;border:0;border-radius:999px;
     padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+
+  /* Final transmission — deadpan, no joke animation beyond a tiny
+     signal-resolve. Same void black; text only. */
+  #contact-screen{
+    position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    background:#000;opacity:0;pointer-events:none;transition:opacity 1.6s ease;z-index:30;
+    font-family:"IBM Plex Mono",monospace;
+  }
+  #contact-screen.visible{opacity:1;pointer-events:auto}
+  .contact-content{display:flex;flex-direction:column;align-items:center;gap:34px;transform:translateY(-2vh)}
+  .contact-title{
+    position:relative;margin:0;font-size:clamp(18px,2vw,30px);font-weight:500;
+    letter-spacing:.12em;line-height:1;color:rgba(245,245,238,.96);white-space:nowrap;opacity:0;
+  }
+  .contact-title.resolve{animation:signalResolve 900ms steps(1,end) forwards,subtleFlicker 4s 1.2s infinite}
+  .contact-email{
+    font-size:clamp(10px,.85vw,13px);font-weight:400;letter-spacing:.05em;
+    color:rgba(225,225,218,.48);text-decoration:none;opacity:0;
+    transition:color 180ms ease,opacity 600ms ease,text-shadow 180ms ease;
+  }
+  .contact-email.visible{opacity:1}
+  .contact-email:hover{color:rgba(255,255,248,.95);text-shadow:-1px 0 rgba(255,255,255,.1),1px 0 rgba(255,255,255,.08)}
+  .contact-title::before,.contact-title::after{
+    content:attr(data-text);position:absolute;inset:0;opacity:0;pointer-events:none;
+  }
+  .contact-title.resolve::before{animation:ghostLeft 650ms steps(2,end)}
+  .contact-title.resolve::after{animation:ghostRight 650ms steps(2,end)}
+  @keyframes signalResolve{
+    0%{opacity:0;filter:blur(5px);transform:translateX(-5px) scaleX(1.04)}
+    9%{opacity:.15;filter:blur(2px);transform:translateX(7px) scaleX(.98)}
+    17%{opacity:.7;filter:blur(1px);transform:translateX(-3px)}
+    24%{opacity:.18;transform:translateX(4px)}
+    32%{opacity:.85;transform:translateX(-1px)}
+    45%{opacity:.38}
+    58%{opacity:1;filter:blur(0);transform:none}
+    100%{opacity:1;filter:none;transform:none}
+  }
+  @keyframes ghostLeft{
+    0%{opacity:0}15%{opacity:.15;transform:translateX(-4px)}30%{opacity:0}
+    44%{opacity:.09;transform:translateX(-2px)}100%{opacity:0}
+  }
+  @keyframes ghostRight{
+    0%{opacity:0}18%{opacity:.12;transform:translateX(5px)}35%{opacity:0}
+    48%{opacity:.07;transform:translateX(2px)}100%{opacity:0}
+  }
+  @keyframes subtleFlicker{0%,96%,100%{opacity:1}97%{opacity:.93}98%{opacity:1}}
 </style>
 <script type="importmap">
 {"imports":{
@@ -27,6 +77,12 @@
 <body>
 <div id="hud">scene 2 &middot; ufo flyby &middot; <span id="status">loading</span></div>
 <button id="replay">replay flyby</button>
+<div id="contact-screen">
+  <div class="contact-content">
+    <h1 class="contact-title" data-text="MAKE CONTACT <3">MAKE CONTACT &lt;3</h1>
+    <a class="contact-email" href="mailto:ryannlynncontact@gmail.com">ryannlynncontact@gmail.com</a>
+  </div>
+</div>
 <div id="err" style="display:none;position:fixed;top:12px;left:12px;max-width:60ch;z-index:99;background:#3a0d0d;color:#ffd7d7;font:12px/1.5 monospace;padding:10px 12px;border-radius:8px;white-space:pre-wrap"></div>
 <script>
 window.addEventListener("error", (e) => {
@@ -219,11 +275,29 @@ let finished = false;
 function startShot(){
   shotStart = clock.getElapsedTime();
   finished = false;
+  contactShown = false;
+  contactScreen.classList.remove("visible");
+  contactTitle.classList.remove("resolve");
+  contactEmail.classList.remove("visible");
   ufoFlightRig.visible = true;
   beam.group.visible = true;
   controls.enabled = false;
   replayBtn.style.display = "none";
   setStatus("approach — rise");
+}
+
+/* Final transmission: deadpan MAKE CONTACT <3 + email, once the UFO is
+   gone and the void is black again. */
+const contactScreen = document.getElementById("contact-screen");
+const contactTitle = contactScreen.querySelector(".contact-title");
+const contactEmail = contactScreen.querySelector(".contact-email");
+let contactShown = false;
+function showContactScreen(){
+  if(contactShown) return;
+  contactShown = true;
+  contactScreen.classList.add("visible");
+  setTimeout(() => { contactTitle.classList.add("resolve"); }, 1800);
+  setTimeout(() => { contactEmail.classList.add("visible"); }, 3300);
 }
 
 /* Chapter mode (embedded in the story controller) waits for the parent's
@@ -369,8 +443,17 @@ function animate() {
   if (st > T_RESIDUAL_END + 0.3 && !finished) {
     finished = true;
     setStatus("complete — replay to watch again");
-    controls.enabled = true;
-    replayBtn.style.display = "block";
+    /* The ending is the contact screen, not chrome: in chapter mode no
+       replay pill, no orbit — just the transmission. Standalone keeps
+       replay so the demo stays rewatchable. */
+    if(isChapter){
+      controls.enabled = false;
+      replayBtn.style.display = "none";
+    }else{
+      controls.enabled = true;
+      replayBtn.style.display = "block";
+    }
+    showContactScreen();
   }
 
   controls.update();
