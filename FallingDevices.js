@@ -169,7 +169,7 @@ export class FallingDevices {
   }
 
   stepWorld() {
-    this.stepWorld();
+    this.world.step();
     /* Rolling velocity history for post-mortem: if the solver ever ejects
        overlapping bodies at release, the spike shows up here. */
     for (const device of this.devices) {
