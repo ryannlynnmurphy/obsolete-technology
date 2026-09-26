@@ -866,6 +866,70 @@ function finishIntro(){
   visitedSectors = new Set([sectorOf(prevAzimuth)]);
 }
 
+/* ---- single-authority freeze instrumentation (diagnostic, no visuals) ----
+   Once the sculpture is frozen, flight-group WORLD transforms must stay
+   identical through the entire orbit. Captured after physics spawns;
+   asserted every 30 frames and during the scripted 360 check. Staging
+   coordinates are never touched here — this only watches. */
+const FLIGHTS = [["laptop", () => lapFlight], ["crt", () => crtFlight], ["tv", () => tvFlight]];
+const ASSERT_EPS = 1e-6;
+const frozenAuthority = { captured: null, frame: 0, violations: [] };
+function captureFrozenAuthority(){
+  if (frozenAuthority.captured) return;
+  if (falling.devices.length !== 3 || !falling.devices.every((d) => d.spawned && d.body)) return;
+  const rec = {};
+  for (const [name, get] of FLIGHTS){
+    const g = get();
+    g.updateMatrixWorld(true);
+    rec[name] = { p: g.position.clone(), q: g.quaternion.clone() };
+  }
+  frozenAuthority.captured = rec;
+  console.log("SCULPTURE LOCKED — frozen transforms captured", JSON.stringify(
+    Object.fromEntries(Object.entries(rec).map(([k, v]) => [k, {
+      p: [+v.p.x.toFixed(3), +v.p.y.toFixed(3), +v.p.z.toFixed(3)],
+      q: [+v.q.x.toFixed(4), +v.q.y.toFixed(4), +v.q.z.toFixed(4), +v.q.w.toFixed(4)],
+    }]))));
+  /* Single-source check: intro end transforms must equal physics spawn
+     definitions, or the handoff itself snaps. */
+  for (const d of falling.devices){
+    const m = introMotions.get(d.object);
+    if (!m) continue;
+    const dp = Math.hypot(m.endP.x - d.position.x, m.endP.y - d.position.y, m.endP.z - d.position.z);
+    if (dp > 1e-6) console.error("DUAL SOURCE DRIFT:", d.name, "intro endP ≠ spawn definition by", dp);
+  }
+}
+function assertFrozenAuthority(context){
+  if (!frozenAuthority.captured || !sculptureReady || falling.isFinalDrop()) return true;
+  let ok = true;
+  for (const [name, get] of FLIGHTS){
+    const g = get();
+    const base = frozenAuthority.captured[name];
+    const dp = g.position.distanceTo(base.p);
+    const dq = 1 - Math.abs(g.quaternion.dot(base.q));
+    if (dp > ASSERT_EPS || dq > 1e-8){
+      ok = false;
+      console.error(`TRANSFORM VIOLATION [${context}] ${name}: Δpos=${dp.toExponential(2)} Δquat=${dq.toExponential(2)}` +
+        ` now=(${g.position.x.toFixed(3)},${g.position.y.toFixed(3)},${g.position.z.toFixed(3)})` +
+        ` frozen=(${base.p.x.toFixed(3)},${base.p.y.toFixed(3)},${base.p.z.toFixed(3)})`,
+        new Error("violation-stack"));
+      frozenAuthority.violations.push({ frame: frozenAuthority.frame, context, name, dp, dq });
+    }
+  }
+  return ok;
+}
+/* Scripted 360 check: orbits the CAMERA a full turn while asserting zero
+   device-transform delta. Suppresses the genuine-revolution release while
+   verifying so the check itself never consumes the one-shot drop. */
+let verifyOrbit = null;
+function verifyOrbit360(){
+  if (!sculptureReady || falling.isFinalDrop()){ console.warn("verifyOrbit360: sculpture not frozen"); return false; }
+  captureFrozenAuthority();
+  if (!frozenAuthority.captured){ console.warn("verifyOrbit360: bodies not spawned yet"); return false; }
+  verifyOrbit = { frames: 0, maxDp: 0, maxDq: 0 };
+  console.log("VERIFY 360 — camera auto-orbit start, device transforms must hold Δ=0");
+  return true;
+}
+
 /* ============================================================
    CAMERA RIG + SCULPTURE ORBIT + FOCUS.
    Sculpture mode: drag empty space to walk around the installation
@@ -935,6 +999,9 @@ function sectorOf(az){
 }
 function noteAzimuthSample(az){
   if(orbitCompleted || focused || camTween || falling.isFinalDrop()){ prevAzimuth = az; return; }
+  /* Scripted verification orbits the camera without counting toward the
+     genuine-revolution release and without consuming the one-shot drop. */
+  if(verifyOrbit){ prevAzimuth = az; return; }
   if(!sculptureReady || !falling.world){ prevAzimuth = az; return; }
   if(prevAzimuth === null){ prevAzimuth = az; visitedSectors.add(sectorOf(az)); return; }
   let d = az - prevAzimuth;
@@ -1221,6 +1288,15 @@ window.__sculpture = {
         type: d.body ? d.body.bodyType() : null })) };
   },
   drop(){ if(!sculptureReady) finishIntro(); fireOrbitComplete(); return falling.isFinalDrop(); },
+  verify(){ return verifyOrbit360(); },
+  frozen(){
+    if(!frozenAuthority.captured) captureFrozenAuthority();
+    const c = frozenAuthority.captured || {};
+    return { captured: !!frozenAuthority.captured,
+      violations: frozenAuthority.violations,
+      transforms: Object.fromEntries(Object.entries(c).map(([k, v]) => [k,
+        [+v.p.x.toFixed(3), +v.p.y.toFixed(3), +v.p.z.toFixed(3)]])) };
+  },
   intro(){ return { ready: sculptureReady, t: +introT.toFixed(3),
     flights: [...introMotions].map(([g, m]) => ({ y: +g.position.y.toFixed(2) })) }; },
 };
@@ -1268,6 +1344,13 @@ function animate(){
   falling.update(dt);
   crtEffect.update(dt);
 
+  /* Freeze authority: capture once spawned, then assert immutability. */
+  frozenAuthority.frame++;
+  if(sculptureReady && !falling.isFinalDrop()){
+    captureFrozenAuthority();
+    if(frozenAuthority.frame % 30 === 0) assertFrozenAuthority("orbit-frame-" + frozenAuthority.frame);
+  }
+
   /* Hover affordance refresh: re-test periodically while orbiting. */
   hoverTick++;
   if(!focused && !camTween && hoverTick % 12 === 0 && lastHoverXY){
@@ -1288,12 +1371,35 @@ function animate(){
       const done = camTween.done; camTween = null; done && done();
       if(!focused) { syncOrbitFromCamera(); prevAzimuth = azimuthOf(); }
     }
-  } else if(!focused){
-    /* Sculpture / void navigation: the rig already placed the camera
-       on drag frames; holding still keeps it exactly where the viewer
-       left it (which is what watches the machines fall away). */
-    _tgt.copy(ORBIT_TGT);
-    noteAzimuthSample(azimuthOf());
+  } else {
+    if(verifyOrbit && !focused && !falling.isFinalDrop()){
+      /* Scripted 360: camera only, devices must hold Δ=0. */
+      orbitTheta += (Math.PI * 2) / 720; // full camera turn over 720 frames (~12s)
+      applyOrbitToCamera();
+      noteAzimuthSample(azimuthOf());
+      verifyOrbit.frames++;
+      for (const [name, get] of FLIGHTS){
+        const g = get(); const base = frozenAuthority.captured[name];
+        if(base){
+          verifyOrbit.maxDp = Math.max(verifyOrbit.maxDp, g.position.distanceTo(base.p));
+          verifyOrbit.maxDq = Math.max(verifyOrbit.maxDq, 1 - Math.abs(g.quaternion.dot(base.q)));
+        }
+      }
+      assertFrozenAuthority("verify360-f" + verifyOrbit.frames);
+      if(verifyOrbit.frames >= 720){
+        const pass = verifyOrbit.maxDp <= ASSERT_EPS && frozenAuthority.violations.length === 0;
+        console.log(`VERIFY 360 ${pass ? "PASS" : "FAIL"} — frames=720 maxΔpos=${verifyOrbit.maxDp.toExponential(2)} maxΔquat=${verifyOrbit.maxDq.toExponential(2)} violations=${frozenAuthority.violations.length}`);
+        /* Manual orbiting starts from a clean slate afterwards. */
+        coherentTotal = 0; dominantDir = 0; visitedSectors = new Set([sectorOf(azimuthOf())]);
+        verifyOrbit = null;
+      }
+    } else if(!focused){
+      /* Sculpture / void navigation: the rig already placed the camera
+         on drag frames; holding still keeps it exactly where the viewer
+         left it (which is what watches the machines fall away). */
+      _tgt.copy(ORBIT_TGT);
+      noteAzimuthSample(azimuthOf());
+    }
   }
   camera.lookAt(_tgt);
 
@@ -1320,6 +1426,17 @@ function animate(){
 
   renderer.render(scene, camera);
   cssRenderer.render(scene, camera);
+}
+/* ?orbit360 — headless self-check: once frozen, auto-orbit the camera a
+   full turn and log VERIFY 360 PASS/FAIL to the console. */
+if(new URLSearchParams(location.search).has("orbit360")){
+  const t0 = setInterval(() => {
+    if(sculptureReady && falling.devices.length === 3 && falling.devices.every((d) => d.spawned)){
+      clearInterval(t0);
+      setTimeout(() => verifyOrbit360(), 500);
+    }
+  }, 250);
+  setTimeout(() => clearInterval(t0), 60000);
 }
 animate();
 

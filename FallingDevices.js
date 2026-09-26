@@ -60,6 +60,11 @@ export class FallingDevices {
        forever. */
     this.sculptureMode = true;
     this.finalDrop = false;
+    /* Single-authority rule: while the sculpture stands, the MESHES own
+       their transforms (bodies are Fixed). Physics takes ownership only
+       on triggerFinalDrop. syncMeshes() enforces this. */
+    this.physicsOwnsTransforms = false;
+    this.velHistory = new Map(); // name -> last ~20 linvel magnitudes
     /* While true, bodies never spawn — the page flies the visible
        groups in by hand (fall-in intro) and releases the pause at the
        exact freeze frame so physics takes over with zero snap. */
@@ -163,6 +168,22 @@ export class FallingDevices {
     this.syncMeshes();
   }
 
+  stepWorld() {
+    this.stepWorld();
+    /* Rolling velocity history for post-mortem: if the solver ever ejects
+       overlapping bodies at release, the spike shows up here. */
+    for (const device of this.devices) {
+      if (!device.body || !device.spawned) continue;
+      let hist = this.velHistory.get(device.name);
+      if (!hist) { hist = []; this.velHistory.set(device.name, hist); }
+      try {
+        const v = device.body.linvel();
+        hist.push(Math.hypot(v.x, v.y, v.z));
+        if (hist.length > 20) hist.shift();
+      } catch { /* diagnostics must never break the sim */ }
+    }
+  }
+
   stepSim(dt) {
     this.simClock += dt;
 
@@ -176,7 +197,7 @@ export class FallingDevices {
        away permanently from exactly where the sculpture released. */
     if (this.finalDrop) {
       this.world.timestep = STEP;
-      this.world.step();
+      this.stepWorld();
       return;
     }
 
@@ -193,7 +214,7 @@ export class FallingDevices {
           device.body.setBodyType(RAPIER.RigidBodyType.Fixed, true);
         }
       }
-      this.world.step();
+      this.stepWorld();
       return;
     }
 
@@ -229,7 +250,7 @@ export class FallingDevices {
       }
     }
 
-    this.world.step();
+    this.stepWorld();
   }
 
   /* Freeze / release a body for screen focus. A frozen body holds
@@ -262,6 +283,17 @@ export class FallingDevices {
     if (this.finalDrop || !this.world) return false;
     this.finalDrop = true;
     this.sculptureMode = false;
+    this.physicsOwnsTransforms = true;
+    try {
+      const rows = this.devices.map((d) => {
+        const hist = this.velHistory.get(d.name) || [];
+        const maxV = hist.length ? Math.max(...hist) : 0;
+        let p = null;
+        try { const t = d.body.translation(); p = [+t.x.toFixed(2), +t.y.toFixed(2), +t.z.toFixed(2)]; } catch {}
+        return { device: d.name, releasePos: p, maxPreReleaseSpeed: +maxV.toFixed(3) };
+      });
+      console.log("RELEASE — physics takes ownership", JSON.stringify(rows));
+    } catch {}
     this.stretchStart = -1;
     this.world.timestep = STEP;
     this.world.gravity.y = FULL_GRAVITY;
@@ -288,6 +320,11 @@ export class FallingDevices {
   }
 
   syncMeshes() {
+    /* FROZEN_SCULPTURE: meshes are authoritative. Bodies are Fixed, so a
+       copy would be a no-op — skipping removes physics as a transform
+       owner entirely. Nothing may alter device transforms from here on
+       until triggerFinalDrop. */
+    if (this.sculptureMode && !this.finalDrop) return;
     for (const device of this.devices) {
       if (!device.body) continue;
       const p = device.body.translation();
