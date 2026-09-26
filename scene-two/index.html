@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Scene 2 — UFO Flyby (separate from obsolete-technology)</title>
+<link rel="icon" href="data:," />
+<style>
+  html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#060708;font-family:system-ui,sans-serif}
+  canvas{display:block}
+  /* HUD hidden when presented as Chapter Two — no interface chrome;
+     the scene itself is unchanged. */
+  #hud{display:none;position:fixed;left:18px;bottom:14px;color:rgba(255,255,255,.34);
+    font:11px/1.5 Arial,sans-serif;letter-spacing:.14em;text-transform:uppercase;
+    user-select:none;pointer-events:none;z-index:10}
+  #replay{position:fixed;right:18px;bottom:14px;z-index:10;display:none;
+    background:#e8edf3;color:#0b0e13;border:0;border-radius:999px;
+    padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+</style>
+<script type="importmap">
+{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+}}
+</script>
+</head>
+<body>
+<div id="hud">scene 2 &middot; ufo flyby &middot; <span id="status">loading</span></div>
+<button id="replay">replay flyby</button>
+<div id="err" style="display:none;position:fixed;top:12px;left:12px;max-width:60ch;z-index:99;background:#3a0d0d;color:#ffd7d7;font:12px/1.5 monospace;padding:10px 12px;border-radius:8px;white-space:pre-wrap"></div>
+<script>
+window.addEventListener("error", (e) => {
+  const d = document.getElementById("err");
+  if (d) { d.style.display = "block"; d.textContent += (e.message || e.error) + "\n"; }
+});
+window.addEventListener("unhandledrejection", (e) => {
+  const d = document.getElementById("err");
+  if (d) { d.style.display = "block"; d.textContent += "async: " + (e.reason && e.reason.message || e.reason) + "\n"; }
+});
+</script>
+
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { buildUFO, EMITTER_BASE_OPACITY, WARM_BOUNCE_BASE, WARM_CORE_BASE, WARM_SIDE_BASE } from "./ufo.js";
+import { buildAtmosphericBeam, setBeamPower, makeFogTexture } from "./beam.js";
+
+/* Scene 2 — separate project from obsolete-technology/.
+   Same black void (#060708). One scene, one camera, one renderer,
+   one composer, one loop. The departure is sold by motion and
+   perspective — no warp tunnel, no flash, no shake, no quantization. */
+
+const DEBUG_UFO_PATH = false;
+
+/* ---------- ONE scene / camera / renderer / composer / loop ---------- */
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x060708);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.1, 400);
+camera.position.set(0, 2, 27);
+const ORBIT_TGT = new THREE.Vector3(0.7, 2.4, 0); // optical center of the shot
+camera.lookAt(ORBIT_TGT);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.55;
+document.body.appendChild(renderer.domElement);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.04; // hull barely catches the void
+
+// Near-black void lighting — the craft carries its own emission
+scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x0a0c10, 0.06));
+const key = new THREE.DirectionalLight(0xffffff, 0.18);
+key.position.set(4, 7, 5);
+scene.add(key);
+const rim = new THREE.DirectionalLight(0x9db8ff, 0.15);
+rim.position.set(-5, 3.5, -6);
+scene.add(rim);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.copy(ORBIT_TGT);
+controls.enableDamping = true;
+controls.enabled = false; // locked-off cinematic shot
+controls.update();
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(
+  new THREE.Vector2(innerWidth, innerHeight), 0.25, 0.34, 0.92
+);
+composer.addPass(bloom);
+
+/* ---------- ONE rigid flight system ---------- */
+const ufoFlightRig = new THREE.Group();
+const ufoVisual = new THREE.Group();
+const beamAnchor = new THREE.Group();
+ufoFlightRig.add(ufoVisual);
+ufoFlightRig.add(beamAnchor);
+scene.add(ufoFlightRig);
+
+const { ufo, emitterMat, warmBounce, warmCore, warmSide } = buildUFO();
+ufoVisual.add(ufo);
+
+// Beam hangs from the recessed aperture (UFO-local Y ≈ -3.8, emitter disc).
+beamAnchor.position.set(0, -3.85, 0.10);
+const beam = buildAtmosphericBeam();
+beamAnchor.add(beam.group);
+
+// A soft local light sells the idea that the haze is illuminated from the craft.
+const beamLight = new THREE.SpotLight(0xffe4bd, 3.2, 13.0, Math.PI * 0.24, 0.96, 1.75);
+beamLight.position.set(0, -3.9, 0.2);
+const beamTarget = new THREE.Object3D();
+beamTarget.position.set(0, -12.0, 0.2);
+ufoFlightRig.add(beamLight);
+ufoFlightRig.add(beamTarget);
+beamLight.target = beamTarget;
+
+// Same on-screen size as the old craft: new hull radius ~16.8 raw needs
+// total scale 0.575 to land on the approved ~9.7-unit world radius.
+// Perspective does the rest.
+const RIG_SCALE = 0.575;
+ufoFlightRig.scale.setScalar(RIG_SCALE);
+
+/* ---------- Departure axis: straight down the camera's look ray ---------- */
+const centerRayDir = ORBIT_TGT.clone().sub(camera.position).normalize();
+const centerRayDistanceNear = camera.position.distanceTo(ORBIT_TGT);
+const launchNearPoint = camera.position.clone().addScaledVector(centerRayDir, centerRayDistanceNear);
+const launchFarPoint = camera.position.clone().addScaledVector(centerRayDir, 215.0);
+const launchPosition = new THREE.Vector3(); // reused — no per-frame allocation
+
+// One extremely faint remnant at the departure point. It contracts rather
+// than explodes, suggesting space briefly pinched and then shut.
+const departureResidual = new THREE.Sprite(new THREE.SpriteMaterial({
+  map: makeFogTexture(256),
+  color: 0xffe4c2,
+  transparent: true,
+  opacity: 0,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+  depthTest: true
+}));
+departureResidual.position.copy(ORBIT_TGT);
+departureResidual.scale.set(0.01, 0.01, 1);
+departureResidual.visible = false;
+scene.add(departureResidual);
+
+/* ---------- SCENE 2 TIMELINE ---------- */
+// 0.00–1.10 : rises into frame
+// 1.10–3.05 : heavy lateral sweep
+// 3.05–3.75 : bends inward
+// 3.75–4.85 : descends into exact optical center
+// 4.85–5.45 : beam quietly dies (lower haze leads)
+// 5.45–6.18 : absolute stillness — no hover, no shake, no charge VFX
+// 6.18–6.55 : light subtly compresses inward
+// 6.55–6.73 : continuous extreme acceleration straight into depth
+// 6.73–7.20 : almost-invisible residual collapses, then black
+const T_RISE_END = 1.10;
+const T_SWEEP_END = 3.05;
+const T_BEND_END = 3.75;
+const T_ARRIVE = 4.85;
+const T_BEAM_OFF = 5.45;
+const T_CUE_END = 6.55;
+const LAUNCH_START = 6.55;
+const LAUNCH_DURATION = 0.18;
+const T_RESIDUAL_END = 7.20;
+const T_CUE_START = 6.18;
+
+const approachPath = new THREE.CatmullRomCurve3([
+  new THREE.Vector3(-8.5, -10.0, 0.0),  // offscreen below-left (invisible start)
+  new THREE.Vector3(-7.0,  -1.0, 2.0),  // rapid rise into frame, pushing toward lens
+  new THREE.Vector3(-5.0,   5.5, 4.5),  // reaches upper frame, close pass
+  new THREE.Vector3( 1.0,   5.0, 4.5),  // heavy sweep across the top, looming
+  new THREE.Vector3( 7.0,   4.0, 4.0),  // far side of the sweep
+  new THREE.Vector3( 4.5,   1.5, 2.0),  // smooth inward bend, settling back
+  new THREE.Vector3( 2.0,   1.9, 0.8),  // converges toward center
+  new THREE.Vector3( 0.7,   2.4, 0.0),  // exact optical center (== controls.target)
+], false, "centripetal", 0.5);
+const arrivalPosition = approachPath.getPointAt(1.0);
+
+if (DEBUG_UFO_PATH) {
+  scene.add(new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints(approachPath.getPoints(200)),
+    new THREE.LineBasicMaterial({ color: 0x00ff88 })
+  ));
+}
+
+function clamp01(v) { return Math.min(1, Math.max(0, v)); }
+function smoothstep01(v) { v = clamp01(v); return v * v * (3 - 2 * v); }
+function easeOutCubic(v) { v = clamp01(v); return 1 - Math.pow(1 - v, 3); }
+function easeInQuint(v) { v = clamp01(v); return v * v * v * v * v; }
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+function approachProgress(t) {
+  if (t <= 0) return 0;
+  if (t < T_RISE_END) return lerp(0.00, 0.20, easeOutCubic(t / T_RISE_END));
+  if (t < T_SWEEP_END) return lerp(0.20, 0.62, (t - T_RISE_END) / (T_SWEEP_END - T_RISE_END));
+  if (t < T_BEND_END) return lerp(0.62, 0.79, smoothstep01((t - T_SWEEP_END) / (T_BEND_END - T_SWEEP_END)));
+  if (t < T_ARRIVE) return lerp(0.79, 1.00, smoothstep01((t - T_BEND_END) / (T_ARRIVE - T_BEND_END)));
+  return 1.0;
+}
+
+const replayBtn = document.getElementById("replay");
+const statusEl = document.getElementById("status");
+function setStatus(s) { if (statusEl) statusEl.textContent = s; }
+
+const clock = new THREE.Clock();
+let shotStart = null; // null = holding on the first frame behind black
+let finished = false;
+
+function startShot(){
+  shotStart = clock.getElapsedTime();
+  finished = false;
+  ufoFlightRig.visible = true;
+  beam.group.visible = true;
+  controls.enabled = false;
+  replayBtn.style.display = "none";
+  setStatus("approach — rise");
+}
+
+/* Chapter mode (embedded in the story controller) waits for the parent's
+   reveal: the UFO rise is the first thing seen after the machines drop.
+   Standalone (opened directly) auto-plays as before. */
+let isChapter = false;
+try{ isChapter = window.self !== window.top; }catch(e){ isChapter = true; }
+if(!isChapter) startShot();
+window.addEventListener("message", (e) => {
+  if(e && e.data && e.data.type === "scene-two-start") startShot();
+});
+/* Reliability: never sit on a frozen frame forever if the signal is missed. */
+setTimeout(() => { if(shotStart === null) startShot(); }, 15000);
+setStatus("approach — rise");
+
+replayBtn.addEventListener("click", () => {
+  startShot();
+});
+
+function animate() {
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+  const st = shotStart === null ? 0 : t - shotStart; // holding on frame 0 until reveal
+
+  /* ----- beam: dies quietly once centered, lower haze leads ----- */
+  const shutdown = smoothstep01((st - T_ARRIVE) / (T_BEAM_OFF - T_ARRIVE));
+  const beamPower = 1.0 - shutdown;
+  setBeamPower(beam, beamPower, t);
+  beamLight.intensity = 0.8 * Math.pow(beamPower, 1.55);
+  if (st >= T_BEAM_OFF + 0.4) beam.group.visible = false;
+
+  /* ----- rig: approach, then pinned at center ----- */
+  const p = approachProgress(st);
+  ufoFlightRig.position.copy(approachPath.getPointAt(p));
+  ufoFlightRig.rotation.set(0, 0, 0);
+
+  // Small directional lean only while travelling; bled to zero on arrival.
+  let bank = 0, pitch = 0;
+  if (st < T_RISE_END) {
+    bank = -0.024 * (1.0 - smoothstep01(st / T_RISE_END));
+    pitch = -0.012;
+  } else if (st < T_SWEEP_END) {
+    bank = -0.010; pitch = -0.004;
+  } else if (st < T_BEND_END) {
+    bank = lerp(-0.010, 0.014, smoothstep01((st - T_SWEEP_END) / (T_BEND_END - T_SWEEP_END)));
+  } else if (st < T_ARRIVE) {
+    bank = lerp(0.014, 0.0, smoothstep01((st - T_BEND_END) / (T_ARRIVE - T_BEND_END)));
+  }
+
+  // Hover bled out before arrival; after arrival the craft is stone still.
+  const arrivalLock = smoothstep01((st - (T_ARRIVE - 0.30)) / 0.30);
+  const hoverAmount = 1.0 - arrivalLock;
+  ufo.position.y = Math.sin(t * 0.34) * 0.018 * hoverAmount;
+  ufo.rotation.x = pitch + Math.sin(t * 0.18) * 0.0022 * hoverAmount;
+  ufo.rotation.z = -0.012 + bank + Math.sin(t * 0.13) * 0.0016 * hoverAmount;
+  ufoVisual.rotation.set(0, 0, 0);
+  beamAnchor.rotation.set(0, 0, 0);
+
+  if (st >= T_ARRIVE && st < LAUNCH_START + LAUNCH_DURATION) {
+    ufoFlightRig.position.copy(arrivalPosition);
+    ufoFlightRig.rotation.set(0, 0, 0);
+    ufo.position.y = 0;
+    ufo.rotation.x = 0;
+    ufo.rotation.z = -0.012;
+  }
+
+  /* ----- cue: light pulls inward, almost imperceptibly ----- */
+  const compression = smoothstep01((st - T_CUE_START) / (T_CUE_END - T_CUE_START));
+  const launch = clamp01((st - LAUNCH_START) / LAUNCH_DURATION);
+  const launchDistance = easeInQuint(launch); // continuous — never quantized
+
+  // Tiny warm pulse only during the first instant of motion.
+  const departurePulse = smoothstep01(launch / 0.22) *
+    (1.0 - smoothstep01((launch - 0.22) / 0.45));
+
+  /* ----- departure: actual travel through depth, perspective does it ----- */
+  if (launch > 0) {
+    launchPosition.lerpVectors(launchNearPoint, launchFarPoint, launchDistance);
+    ufoFlightRig.position.copy(launchPosition);
+  }
+
+  const perspectiveDim = 1.0 - 0.995 * smoothstep01(launchDistance);
+  const compressionDim = 1.0 - compression * 0.22;
+  const pulseBoost = 1.0 + departurePulse * 0.85;
+  const glowBreath = Math.sin(t * 1.10) * 0.10 * (1.0 - arrivalLock);
+
+  // Emitter + machine lights carry the same departure math the old engine
+  // channel had: beam-coupled base, cue compression, perspective falloff,
+  // and a whisper of a pulse at the instant of motion.
+  const emitterBase = EMITTER_BASE_OPACITY * 0.6 + glowBreath * 0.02;
+  emitterMat.opacity = Math.min(1, Math.max(
+    0.02,
+    emitterBase *
+    (0.72 + beamPower * 0.16) *
+    compressionDim * perspectiveDim * pulseBoost
+  ));
+  warmCore.intensity = WARM_CORE_BASE * 0.28 *
+    (0.70 + beamPower * 0.14) *
+    compressionDim * perspectiveDim * pulseBoost;
+  warmBounce.intensity = WARM_BOUNCE_BASE * 0.28 *
+    (0.70 + beamPower * 0.14) *
+    compressionDim * perspectiveDim * pulseBoost;
+  warmSide.intensity = Math.max(
+    0.15,
+    WARM_SIDE_BASE * 0.28 *
+    (1.0 - compression * 0.10) * perspectiveDim
+  );
+
+  // Post stays quiet — a minuscule bloom lift, then gone with the craft.
+  bloom.strength = 0.25 + 0.055 * departurePulse;
+
+  /* ----- residual: barely-there contraction, then black ----- */
+  if (st >= LAUNCH_START + 0.03 && st <= T_RESIDUAL_END) {
+    const rp = clamp01((st - (LAUNCH_START + 0.03)) / (T_RESIDUAL_END - (LAUNCH_START + 0.03)));
+    const appear = smoothstep01(rp / 0.16);
+    const disappear = 1.0 - smoothstep01((rp - 0.18) / 0.82);
+    const visibility = appear * disappear;
+    const s = lerp(0.80, 0.10, smoothstep01(rp));
+    departureResidual.visible = visibility > 0.001;
+    departureResidual.material.opacity = 0.020 * visibility;
+    departureResidual.scale.set(s, s, 1);
+    departureResidual.position.copy(ORBIT_TGT);
+  } else {
+    departureResidual.visible = false;
+    departureResidual.material.opacity = 0;
+  }
+
+  // Let perspective make it impossibly small, then remove before the far plane.
+  ufoFlightRig.visible = launch < 0.985;
+  if (launch >= 0.985) beam.group.visible = false;
+
+  /* ----- HUD ----- */
+  if (!finished) {
+    if (st < T_RISE_END) setStatus("approach — rise");
+    else if (st < T_SWEEP_END) setStatus("approach — sweep across");
+    else if (st < T_BEND_END) setStatus("approach — curving inward");
+    else if (st < T_ARRIVE) setStatus("approach — center descent");
+    else if (st < T_BEAM_OFF) setStatus("beam dissipating");
+    else if (st < T_CUE_START) setStatus("stillness");
+    else if (st < LAUNCH_START) setStatus("something engages");
+    else if (st < T_RESIDUAL_END) setStatus("—");
+  }
+  if (st > T_RESIDUAL_END + 0.3 && !finished) {
+    finished = true;
+    setStatus("complete — replay to watch again");
+    controls.enabled = true;
+    replayBtn.style.display = "block";
+  }
+
+  controls.update();
+  composer.render();
+}
+animate();
+
+addEventListener("resize", () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  composer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
