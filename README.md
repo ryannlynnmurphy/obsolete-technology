@@ -1,25 +1,15 @@
 # obsolete technology
 
-Scene 1: three obsolete machines — a console TV, a CRT monitor, a laptop —
-drop fast out of the dark like they were thrown from a three-story window,
-then freeze mid-air and hang there as a sculpture. One drop per load; the
-freeze is permanent (physics is severed, poses are captured).
-
-- Orbit 360° around the frozen sculpture (enabled the instant it locks).
-- Click any screen to step inside and use it (Softie on the CRT, the
-  workstation on the laptop, static on the TV). ESC steps back out.
-  The objects themselves can never be moved.
+Three obsolete machines — a console TV, a CRT monitor, a laptop — fall
+forever through an empty void in deep slow motion. Click any screen to
+step inside and use it. ESC steps back out.
 
 - `index.html` — the three devices, their working screens, staging, camera.
   The CRT runs `softie-os.html` (the Softie desktop, booting with Solitaire
   maximized) as a live overlay page; click anywhere on the monitor to step
   in and use it.
-- `FallingDevices.js` — the drop controller: ballistic fall at ~Earth
-  gravity sampled at 24fps display cadence, then a hard freeze at
-  PRE_DROP → FALLING → FROZEN (terminal; no loop, no respawn).
-- `FallingDevices.js` — the drop controller: ballistic fall at ~Earth
-  gravity sampled at 24fps display cadence, then a hard freeze at
-  PRE_DROP → FALLING → FROZEN (terminal; no loop, no respawn).
+- `FallingDevices.js` — the Rapier physics controller (staged slow-fall,
+  screen-focus freeze, invisible top/bottom wrap).
 - `solitaire-win2000.html` — a complete Klondike game, hosted inside Softie
   via `solitaire-app.html`.
 - `softie-os.html` — the Softie desktop: taskbar, window manager, rx.pdf

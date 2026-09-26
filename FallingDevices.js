@@ -1,26 +1,44 @@
 /* ============================================================
-   FallingDevices — Scene 1: ONE fast drop, then a HARD FREEZE.
+   FallingDevices — staged slow-fall.
 
-   The three machines spawn above the frame and fall ballistically
-   (Earth-like gravity, real elapsed time). Displayed transforms are
-   sampled at ~24fps during the fall for a cinematic cadence; the
-   camera stays smooth throughout.
+   The event: the TV drops hard and gets farther ahead, the CRT
+   and laptop follow. Slow motion engages only once all three are
+   inside the frame — then everything sinks at ~4% speed, spaced
+   apart, forever (wrap top/bottom, invisible).
 
-   At the freeze instant the current transforms are captured, every
-   body is parked, and the physics world is destroyed. The frozen
-   poses then drive the meshes directly, forever:
-
-     PRE_DROP → FALLING → FROZEN (terminal; never loops back)
-
-   There is no slow-motion sink, no wrap/respawn, no second drop.
-   After FROZEN the objects are a sculpture: untouchable, unmoving.
-   Only the camera moves (OrbitControls, wired up in the page).
+   Clicking a screen steps inside that machine (handled in the
+   page); the focused body freezes so its screen is stable.
+   Bodies are never dragged — they stay where the fall takes them.
    ============================================================ */
 import * as THREE from "three";
 import RAPIER from "@dimforge/rapier3d-compat";
 
-const STEP = 1 / 60;          // physics runs full-rate, display-independent
-const SAMPLE_24 = 1 / 24;     // ...but poses are sampled at film cadence
+const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+
+function smoothstep(min, max, value) {
+  const x = clamp((value - min) / (max - min), 0, 1);
+  return x * x * (3 - 2 * x);
+}
+
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+const STEP = 1 / 60;          // real-time pacing, display independent
+const FULL_GRAVITY = -13;
+
+/* Deep slow motion, with restraint: visible drift, not a still. */
+const SINK_SCALE = 0.04;
+const STRETCH_LEN = 2.5;
+
+/* Slow-mo trigger: everyone spawned, last arrival in frame,
+   leader still above the bottom. Frame-relative, not timed. */
+const FRAME_TOP = 11;
+const FRAME_BOTTOM = -6;
+
+/* Wrap band — both outside the visible frame. */
+const WRAP_TOP = 13;
+const WRAP_BOTTOM = -8;
 
 export class FallingDevices {
   constructor({ scene, camera, renderer }) {
@@ -31,42 +49,25 @@ export class FallingDevices {
     this.world = null;
     this.devices = [];
 
-    this.state = "PRE_DROP";
     this.simClock = 0;
     this.acc = 0;
-    this.sampleAcc = 0;
-
-    this.gravity = -12;
-    this.freezeY = -0.5;
-    this.leadName = "tv";
-    this.onFreeze = null;
+    this.stretchStart = -1;
   }
 
-  async init(deviceDefinitions, options = {}) {
+  async init(deviceDefinitions) {
     await RAPIER.init();
 
-    this.gravity = options.gravity ?? -12;
-    this.freezeY = options.freezeY ?? -0.5;
-    this.leadName = options.leadName ?? "tv";
-    this.onFreeze = typeof options.onFreeze === "function" ? options.onFreeze : null;
-
-    this.world = new RAPIER.World({ x: 0, y: this.gravity, z: 0 });
+    this.world = new RAPIER.World({ x: 0, y: FULL_GRAVITY, z: 0 });
     this.world.timestep = STEP;
 
     this.devices = deviceDefinitions.map((definition) => {
       definition.object.visible = false;
-      return { ...definition, body: null, spawned: false, frozenPose: null };
+      return { ...definition, body: null, spawned: false };
     });
 
-    this.state = "PRE_DROP";
     this.simClock = 0;
     this.acc = 0;
-    this.sampleAcc = 0;
-    console.log("[sculpture] PRE_DROP — devices staged above frame");
-  }
-
-  getState() {
-    return this.state;
+    this.stretchStart = -1;
   }
 
   deviceByName(name) {
@@ -76,7 +77,7 @@ export class FallingDevices {
   spawnDevice(device) {
     if (device.spawned) return;
 
-    const { position, rotation, velocity, angularVelocity } = device;
+    const { position, rotation, velocity, angularVelocity, colliders, mass } = device;
 
     device.object.visible = true;
 
@@ -87,20 +88,35 @@ export class FallingDevices {
     device.object.quaternion.copy(q);
     device.object.updateMatrixWorld();
 
-    // Pure ballistic bodies: no colliders (nothing to hit in the void),
-    // no damping — heavy electronics in free fall.
     const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
       .setTranslation(position.x, position.y, position.z)
       .setRotation({ x: q.x, y: q.y, z: q.z, w: q.w })
       .setLinvel(velocity.x, velocity.y, velocity.z)
       .setAngvel({ x: angularVelocity.x, y: angularVelocity.y, z: angularVelocity.z })
-      .setLinearDamping(0)
-      .setAngularDamping(0)
+      .setLinearDamping(0.05)
+      .setAngularDamping(2.0)
       .setCanSleep(false)
       .setCcdEnabled(false);
 
     device.body = this.world.createRigidBody(bodyDesc);
 
+    /* Split mass across colliders by volume so compound
+       bodies (open laptop lid, TV legs) weigh correctly. */
+    let volume = 0;
+    for (const c of colliders) volume += (c.h[0] * 2) * (c.h[1] * 2) * (c.h[2] * 2);
+    const density = mass / Math.max(volume, 1e-6);
+
+    for (const c of colliders) {
+      const colliderDesc = RAPIER.ColliderDesc.cuboid(c.h[0], c.h[1], c.h[2])
+        .setTranslation(c.p[0], c.p[1], c.p[2])
+        .setRotation({ x: c.q[0], y: c.q[1], z: c.q[2], w: c.q[3] })
+        .setDensity(density)
+        .setFriction(0.6)
+        .setRestitution(0.1);
+      this.world.createCollider(colliderDesc, device.body);
+    }
+
+    /* Map meshes back to the device for picking. */
     device.object.traverse((child) => {
       child.userData.physicsDevice = device;
     });
@@ -109,124 +125,73 @@ export class FallingDevices {
   }
 
   update(frameDt) {
-    if (this.state === "FROZEN") return;
     if (!this.world) return;
 
     this.acc = Math.min(this.acc + frameDt, 0.12);
     while (this.acc >= STEP) {
       this.stepSim(STEP);
       this.acc -= STEP;
-      if (this.state === "FROZEN") break;
     }
 
-    // Cinematic 24fps sampling: physics runs at full rate, the visible
-    // sculpture updates at film cadence. Camera motion stays smooth.
-    if (this.state === "FALLING") {
-      this.sampleAcc += frameDt;
-      if (this.sampleAcc >= SAMPLE_24) {
-        this.sampleAcc = 0;
-        this.syncMeshes();
-      }
-    }
+    this.syncMeshes();
   }
 
   stepSim(dt) {
     this.simClock += dt;
 
-    let anySpawned = false;
     for (const device of this.devices) {
       if (!device.spawned && this.simClock >= device.delay) {
         this.spawnDevice(device);
       }
-      if (device.spawned) anySpawned = true;
     }
 
-    if (anySpawned && this.state === "PRE_DROP") {
-      this.state = "FALLING";
-      console.log("[sculpture] FALL START — falling at real speed");
+    /* The trigger: all in frame before time stretches. */
+    if (this.stretchStart < 0 && this.devices.every((d) => d.spawned)) {
+      const ys = this.devices.map((d) => d.body.translation().y);
+      const topY = Math.max(...ys);
+      const botY = Math.min(...ys);
+      if (topY < FRAME_TOP && botY > FRAME_BOTTOM) {
+        this.stretchStart = this.simClock;
+      }
+    }
+
+    const phase = this.stretchStart < 0
+      ? 0
+      : smoothstep(this.stretchStart, this.stretchStart + STRETCH_LEN, this.simClock);
+
+    /* Drop regime -> sink regime, blended through the stretch. */
+    this.world.timestep = STEP * lerp(1, SINK_SCALE, phase);
+    for (const device of this.devices) {
+      if (!device.body) continue;
+      device.body.setLinearDamping(lerp(device.dropDamp, device.fallDamp, phase));
+      device.body.setGravityScale(lerp(device.dropG, 1, phase), false);
+    }
+
+    /* Wrap below-frame to above-frame, motion intact (never a frozen
+       focused one). */
+    for (const device of this.devices) {
+      if (!device.body || device.frozen) continue;
+      const p = device.body.translation();
+      if (p.y < WRAP_BOTTOM) {
+        device.body.setTranslation({ x: p.x, y: WRAP_TOP, z: p.z }, true);
+      }
     }
 
     this.world.step();
-
-    // The lead (lowest, heaviest) device reaching its mark ends the fall.
-    // Same gravity + same initial velocity for all three, so the spawn
-    // offsets ARE the frozen composition.
-    const lead = this.deviceByName(this.leadName);
-    if (this.state === "FALLING" && lead && lead.body) {
-      if (lead.body.translation().y <= this.freezeY) {
-        this.hardFreeze();
-      }
-    }
   }
 
-  hardFreeze() {
-    if (this.state === "FROZEN") return;
-    console.log("[sculpture] FREEZE TRIGGERED");
-
-    // Capture the exact transforms at this instant — the render loop
-    // uses these directly from now on. Physics never touches them again.
-    this.syncMeshes();
-    for (const device of this.devices) {
-      device.frozenPose = {
-        p: device.object.position.clone(),
-        q: device.object.quaternion.clone(),
-      };
-      if (device.body) {
-        try {
-          device.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
-          device.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
-          device.body.setBodyType(RAPIER.RigidBodyType.Fixed, true);
-        } catch {
-          // already gone — the poses above are what matter
-        }
-      }
-      device.body = null;
-    }
-
-    // Sever the simulation entirely. No stepping, no settling, no wakeups.
-    try {
-      this.world.free();
-    } catch {
-      // ignore teardown errors
-    }
-    this.world = null;
-    this.state = "FROZEN";
-    console.log("[sculpture] PHYSICS DISABLED — SCULPTURE LOCKED");
-
-    if (this.onFreeze) {
-      try {
-        this.onFreeze(this.getCenter());
-      } catch {
-        // host wiring errors must not unfreeze anything
-      }
-    }
-  }
-
-  getCenter() {
-    const c = new THREE.Vector3();
-    let n = 0;
-    for (const d of this.devices) {
-      if (d.spawned) {
-        c.add(d.object.position);
-        n++;
-      }
-    }
-    return n ? c.multiplyScalar(1 / n) : new THREE.Vector3(0, 2, 0);
-  }
-
-  /* Kept for the screen-focus code: after the Scene-1 freeze this is a
-     harmless no-op (bodies are parked and the world is gone). */
+  /* Freeze / release a body for screen focus. A frozen body holds
+     perfectly still so its screen is stable to use. */
   setFrozen(name, freeze) {
-    if (!this.world) return;
     const device = this.deviceByName(name);
     if (!device || !device.body) return;
-    try {
-      device.body.setBodyType(
-        freeze ? RAPIER.RigidBodyType.Fixed : RAPIER.RigidBodyType.Dynamic,
-        true
-      );
-    } catch {
-      // ignore
+    device.frozen = freeze;
+    if (freeze) {
+      device.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      device.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      device.body.setBodyType(RAPIER.RigidBodyType.Fixed, true);
+    } else {
+      device.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
     }
   }
 
