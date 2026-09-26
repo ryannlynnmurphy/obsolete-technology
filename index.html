@@ -35,6 +35,7 @@
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { CSS3DRenderer, CSS3DObject } from "three/addons/renderers/CSS3DRenderer.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { FallingDevices } from "./FallingDevices.js";
 import { createSoftieCRTEffect } from "./softie-crt-effect.js";
 import { wireSoftieOS } from "./softie-os-bridge.js";
@@ -60,6 +61,22 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.1;
 document.body.appendChild(renderer.domElement);
+
+/* Scene-1 camera: a pure orbit around the frozen sculpture. Disarmed
+   during the drop (the fall is directed, not interactive) and armed
+   the instant physics locks. Screen visits borrow the camera and
+   hand it back. Camera only — the objects are never touched. */
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enabled = false;
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.enablePan = false;
+controls.rotateSpeed = 0.6;
+controls.minDistance = 6;
+controls.maxDistance = 60;
+controls.minPolarAngle = 0.15;
+controls.maxPolarAngle = Math.PI * 0.78;
+controls.target.copy(OVERVIEW_TGT);
 
 /* DOM overlay layer: hosts the solitaire game as a live page mapped
    onto the CRT screen. Click-through everywhere except the game. */
@@ -751,67 +768,50 @@ gameObj.position.set(-0.18, 0.25, 1.826);
 gameObj.visible = false;
 crt.group.add(gameObj);
 
-/* Collider quats in flight space (account for inner offsets:
-   laptop base yaw -18°, lid = yaw(-18°) * tilt(-12°)). */
-const _ce = new THREE.Euler(), _cq = new THREE.Quaternion();
-function Q(x, y, z, order){
-  _ce.set(x, y, z, order || "XYZ");
-  _cq.setFromEuler(_ce);
-  return [_cq.x, _cq.y, _cq.z, _cq.w];
-}
+/* Shared tilt helper for the drop poses. */
 const D2R = THREE.MathUtils.degToRad;
-const IDENT_Q = [0, 0, 0, 1];
 
 const falling = new FallingDevices({ scene, camera, renderer });
-/* The drop: staggered slots down an empty shaft. The TV drops hard
-   and runs ahead; CRT drifts in the middle; laptop floats last and
-   slowest. Wide x separation so they never pile — the space between
-   them is the composition. Small tilts, slow rotation, no floor. */
+/* THE DROP — one ballistic fall, then a hard freeze. All three spawn
+   above the frame with the SAME downward velocity under the SAME
+   gravity, so the spawn offsets below ARE the frozen composition:
+   laptop highest, CRT the central anchor, TV lowest but fully
+   readable with negative space beneath it. No floor, no loop. */
 falling.init([
   {
     name: "tv", object: tvFlight,
     delay: 0,
-    position: { x: 0.5, y: 15.5, z: 0 },
+    position: { x: 0.4, y: 14.0, z: -0.2 },
     rotation: { x: D2R(3), y: D2R(-4), z: D2R(2) },
-    velocity: { x: 0, y: -1, z: 0 },
+    velocity: { x: 0, y: -2, z: 0 },
     angularVelocity: { x: 0.15, y: 0.10, z: -0.12 },
-    mass: 30, dropDamp: 3.0, dropG: 1.35, fallDamp: 13,
-    colliders: [
-      { h: [2.95, 1.5, 0.85], p: [0, 1.47, 0], q: IDENT_Q },
-      { h: [1.6, 1.0, 0.55],  p: [-0.7, 1.55, -0.9], q: IDENT_Q },
-      { h: [2.4, 0.9, 0.6],   p: [0, -0.9, 0], q: IDENT_Q },
-    ],
   },
   {
     name: "crt", object: crtFlight,
-    delay: 0.4,
-    position: { x: -1.8, y: 16.5, z: 0.3 },
+    delay: 0.06,
+    position: { x: -1.6, y: 17.0, z: 0.2 },
     rotation: { x: D2R(-2), y: D2R(3), z: D2R(-3) },
-    velocity: { x: 0, y: -0.5, z: 0 },
+    velocity: { x: 0, y: -2, z: 0 },
     angularVelocity: { x: -0.12, y: 0.15, z: 0.10 },
-    mass: 14, dropDamp: 3.2, dropG: 1.0, fallDamp: 24,
-    colliders: [
-      { h: [2.016, 1.584, 1.224], p: [0, 0, 0], q: IDENT_Q },
-      { h: [1.332, 0.252, 0.936], p: [0, -2.16, 0.036], q: IDENT_Q },
-    ],
   },
   {
     name: "laptop", object: lapFlight,
-    delay: 0.9,
-    position: { x: 2.2, y: 17.5, z: -0.3 },
+    delay: 0.12,
+    position: { x: 2.0, y: 21.0, z: -0.4 },
     rotation: { x: D2R(14), y: D2R(28), z: D2R(10) },
-    velocity: { x: 0, y: -0.5, z: 0 },
+    velocity: { x: 0, y: -2, z: 0 },
     angularVelocity: { x: 0.15, y: -0.15, z: 0.12 },
-    mass: 4, dropDamp: 2.4, dropG: 0.85, fallDamp: 37,
-    colliders: [
-      /* base (inner offset rotated by base yaw) */
-      { h: [1.6, 0.075, 1.05], p: [0, 0.1, 0], q: Q(0, D2R(-18), 0) },
-      /* open lid: pivot + tilted center, then base yaw */
-      { h: [1.5875, 0.9375, 0.05], p: [0.3725, 1.06, -1.1465],
-        q: Q(D2R(-12), D2R(-18), 0, "YXZ") },
-    ],
   },
-]);
+], {
+  gravity: -12,      // ~Earth gravity: thrown-from-a-window fast
+  freezeY: -0.5,     // the TV reaching this height ends the fall
+  leadName: "tv",
+  onFreeze: (center) => {
+    // The sculpture is locked — arm the orbit around its center.
+    controls.target.copy(center);
+    controls.enabled = true;
+  },
+});
 
 /* ============================================================
    CAMERA RIG + FOCUS + GRAB.
@@ -865,7 +865,10 @@ function rayScreens(e){
 
 function enterFocus(name){
   if(focused) return;
+  // The fall is directed, not interactive: screens open only after the freeze.
+  if(falling.getState() !== "FROZEN") return;
   focused = name;
+  controls.enabled = false; // screen visits borrow the camera
   exitBtn.classList.add("show");
   // The laptop draws its own cursor in-texture, so the system arrow hides
   // and the virtual cursor IS the mouse immediately. CRT/TV keep the arrow:
@@ -895,7 +898,11 @@ function exitFocus(){
   focused = null;
   exitBtn.classList.remove("show");
   renderer.domElement.style.cursor = "default";
-  tweenCamTo(OVERVIEW_POS, OVERVIEW_TGT, 1.25, ()=>{});
+  tweenCamTo(OVERVIEW_POS, OVERVIEW_TGT, 1.25, ()=>{
+    // Hand the camera back to the orbit, retargeted on the sculpture.
+    controls.target.copy(OVERVIEW_TGT);
+    controls.enabled = true;
+  });
   computer.exitComputerMode();
 }
 exitBtn.addEventListener("click", exitFocus);
@@ -958,9 +965,11 @@ renderer.domElement.addEventListener("pointermove", (e)=>{
     return;
   }
   if(focused) return;
-  // Unfocused hover affordance: hand cursor over any clickable screen.
+  if(e.buttons !== 0) return; // don't fight orbit drags
+  // Unfocused hover affordance (armed after the freeze): hand over screens.
   lastHoverXY = {clientX:e.clientX, clientY:e.clientY};
-  renderer.domElement.style.cursor = rayScreens(e) ? "pointer" : "default";
+  renderer.domElement.style.cursor =
+    (falling.getState() === "FROZEN" && rayScreens(e)) ? "pointer" : "default";
 });
 renderer.domElement.addEventListener("pointerup", (e)=>{
   if(focused){
@@ -1029,21 +1038,25 @@ function animate(){
   /* Hover affordance refresh: the devices sink continuously, so a
      stationary pointer drifts on and off screens — re-test periodically. */
   hoverTick++;
-  if(!focused && hoverTick % 12 === 0 && lastHoverXY){
+  if(!focused && falling.getState() === "FROZEN" && hoverTick % 12 === 0 && lastHoverXY){
     renderer.domElement.style.cursor = rayScreens(lastHoverXY) ? "pointer" : "default";
   }
 
-  /* camera flights (screen focus transitions) */
-  if(camTween){
-    camTween.t += dt/camTween.dur;
-    const k = easeIO(Math.min(1, camTween.t));
-    camera.position.lerpVectors(camTween.p0, camTween.p1, k);
-    _tgt.lerpVectors(camTween.t0, camTween.t1, k);
-    if(camTween.t >= 1){
-      const done = camTween.done; camTween = null; done && done();
+  /* camera: orbit owns it when armed; flights own it otherwise */
+  if(controls.enabled){
+    controls.update();
+  }else{
+    if(camTween){
+      camTween.t += dt/camTween.dur;
+      const k = easeIO(Math.min(1, camTween.t));
+      camera.position.lerpVectors(camTween.p0, camTween.p1, k);
+      _tgt.lerpVectors(camTween.t0, camTween.t1, k);
+      if(camTween.t >= 1){
+        const done = camTween.done; camTween = null; done && done();
+      }
     }
+    camera.lookAt(_tgt);
   }
-  camera.lookAt(_tgt);
 
   /* screens stay alive.
      Canvas redraws run at half rate — the texture uploads are the
