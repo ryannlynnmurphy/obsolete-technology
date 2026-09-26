@@ -829,6 +829,7 @@
     final.className = 'final-message hard';
     final.textContent = 'LOOK AROUND YOU.';
     terminal.appendChild(final);
+    postToParent({ type: 'field-terminal-look-around' });
     state.ended = true;
   }
 

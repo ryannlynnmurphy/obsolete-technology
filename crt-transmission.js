@@ -204,6 +204,12 @@ export function createCRTTransmission({ screenMesh, parent } = {}) {
   let glowTarget = 0.05;
 
   let active = false;
+  let burstUntil = 0;
+
+  function burst(seconds = 12) {
+    if (!active) return;
+    burstUntil = performance.now() + seconds * 1000;
+  }
 
   function activate() {
     if (active) return;
@@ -227,10 +233,20 @@ export function createCRTTransmission({ screenMesh, parent } = {}) {
   function update(dt) {
     const t = Math.max(0, Math.min(0.1, Number(dt) || 0.016));
     uniforms.uTime.value += t;
+    if (active) {
+      const bursting = performance.now() < burstUntil;
+      uniforms.uAmount.value = bursting ? 1.55 : GLYPHS.amount;
+      uniforms.uTear.value = bursting ? 1.9 : GLYPHS.tear;
+      uniforms.uRoll.value = bursting ? 1.3 : GLYPHS.roll;
+      uniforms.uRGBSplit.value = bursting ? .55 : GLYPHS.rgb;
+      uniforms.uNoise.value = bursting ? 1.5 : GLYPHS.noise;
+      uniforms.uGlyph.value = bursting ? 1.3 : GLYPHS.glyph;
+      glowTarget = bursting ? 4.5 : 2.2;
+    }
     // Fast ease-in for the phosphor light (~150–300ms). Uniforms are
     // snapped on activate; damping here only guards partial states.
     glow.intensity = damp(glow.intensity, glowTarget, 10, t);
   }
 
-  return { activate, update, get active() { return active; } };
+  return { activate, burst, update, get active() { return active; } };
 }
