@@ -911,6 +911,10 @@
       add('TRANSMISSION SENT.', 'hard');
       await sleep(420);
       add('RESPONSE INBOUND.', 'warn flicker');
+      await sleep(150);
+      // Contact succeeded: tell the room. scene-one listens and wakes the
+      // CRT after a short propagation delay. N branch never sends this.
+      postToParent({ type: 'alien-contact-established' });
       await sleep(280);
       await overwhelmWithStatic('SIGNAL SATURATION');
     } else if (v === '' || v === 'n' || v === 'no') {

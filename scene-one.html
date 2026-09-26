@@ -37,6 +37,7 @@ import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.j
 import { CSS3DRenderer, CSS3DObject } from "three/addons/renderers/CSS3DRenderer.js";
 import { FallingDevices } from "./FallingDevices.js";
 import { createSoftieCRTEffect } from "./softie-crt-effect.js";
+import { createCRTTransmission } from "./crt-transmission.js";
 import { wireSoftieOS } from "./softie-os-bridge.js";
 
 /* ============================================================
@@ -132,7 +133,7 @@ function buildCRT(){
 
   add(new THREE.Mesh(new RoundedBoxGeometry(4.2,.47,.19,6,.07),plasticShadow),.15,-1.65,1.65);
   const powerButton = add(new THREE.Mesh(new RoundedBoxGeometry(.48,.3,.22,4,.045),darkPlastic),1.75,-1.65,1.81);
-  const led = new THREE.Mesh(new THREE.SphereGeometry(.065,20,20),ledOn);
+  const led = new THREE.Mesh(new THREE.SphereGeometry(.065,20,20),ledOff);
   led.position.set(1.35,-1.65,1.81); group.add(led);
 
   for(const s of [-1,1]) for(let i=0;i<9;i++){
@@ -146,9 +147,9 @@ function buildCRT(){
   add(new THREE.Mesh(new RoundedBoxGeometry(1.45,.85,1.25,6,.18),plastic),0,-2.55,-.1);
   add(new THREE.Mesh(new RoundedBoxGeometry(3.7,.42,2.6,8,.18),plastic),0,-3.08,.05);
 
-  /* The screen belongs to solitaire-win2000.html now — this canvas
-     is just dark glass behind the overlay. */
-  const S = {power:true};
+  /* The CRT is dark/inactive until the laptop establishes contact —
+     then it permanently carries the alien transmission (see below). */
+  const S = {power:false};
   function drawScreen(t){
     const W=640,H=480;
     g.fillStyle="#0b0b0c";g.fillRect(0,0,W,H);
@@ -753,6 +754,23 @@ gameObj.position.set(-0.18, 0.25, 1.826);
 gameObj.visible = false;
 crt.group.add(gameObj);
 
+/* Alien transmission on the CRT screen mesh. Dark/inactive until the
+   laptop's MAKE CONTACT? Y succeeds; then permanent for this scene.
+   The only reset is tearing down the whole scene (chapter cut). */
+const crtTransmission = createCRTTransmission({
+  THREE, screenMesh: crt.display, parent: crt.group,
+});
+function onAlienContactEstablished(){
+  if(crtTransmission.active) return;
+  /* Signal propagation beat: the laptop finishes first, then ~380ms
+     later the CRT suddenly receives it. Total ~0.5s after YES. */
+  setTimeout(() => {
+    crt.togglePower(); /* LED on — the set wakes up */
+    crtTransmission.activate();
+  }, 380);
+}
+window.addEventListener("alien-contact-established", onAlienContactEstablished);
+
 /* Field terminal on the laptop lid: full-bleed live page mapped onto
    the laptop display quad. Parented to the display mesh so it rides
    the lid tilt; 1024x560 matches OS_W/OS_H (aspect 1.828 vs 1.825).
@@ -1100,7 +1118,7 @@ function setPtr(e){
 }
 function rayScreens(e){
   setPtr(e); _ray.setFromCamera(_ptr, camera);
-  if(_ray.intersectObject(crt.display, false).length) return "crt";
+  /* CRT is never interactive — the laptop is the interaction device. */
   if(_ray.intersectObject(lap.display, false).length) return "laptop";
   if(_ray.intersectObjects([tvd.glass, tvd.innerScreen], false).length) return "tv";
   return null;
@@ -1169,6 +1187,11 @@ addEventListener("message", (e)=>{
   if(m && m.type === "field-terminal-flash" && typeof m.code === "string"){
     lap.flashKey(m.code);
   }
+  /* Laptop reports successful alien contact (Y branch only). The CRT
+     listens: after a short propagation delay it wakes permanently. */
+  if(m && m.type === "alien-contact-established"){
+    window.dispatchEvent(new CustomEvent("alien-contact-established"));
+  }
 });
 addEventListener("keydown", (e)=>{
   if(e.key === "Escape"){
@@ -1207,14 +1230,10 @@ renderer.domElement.addEventListener("pointerdown", (e)=>{
      instead become a click. The 6px threshold decides on move/up. */
   orbitDrag = {x0:e.clientX, y0:e.clientY, lx:e.clientX, ly:e.clientY, orbiting:false};
   if(falling.isFinalDrop()){ downInfo = null; return; }
-  /* click a screen to step inside (laptop / tv), or anywhere on
-     the CRT body — its whole screen is the game now */
+  /* click a screen to step inside (laptop / tv only — the CRT is not
+     interactive and carries no UI) */
   const scr = rayScreens(e);
-  if(scr && scr !== "crt"){ downInfo = {x:e.clientX, y:e.clientY, kind:"focus", screen:scr}; return; }
-  setPtr(e); _ray.setFromCamera(_ptr, camera);
-  if(_ray.intersectObject(crt.group, true).length){
-    downInfo = {x:e.clientX, y:e.clientY, kind:"focus", screen:"crt"}; return;
-  }
+  if(scr){ downInfo = {x:e.clientX, y:e.clientY, kind:"focus", screen:scr}; return; }
   downInfo = null;
 });
 renderer.domElement.addEventListener("pointermove", (e)=>{
@@ -1371,6 +1390,7 @@ function animate(){
 
   falling.update(dt);
   crtEffect.update(dt);
+  crtTransmission.update(dt);
 
   /* Freeze authority: capture once spawned, then assert immutability. */
   frozenAuthority.frame++;
@@ -1468,9 +1488,12 @@ function animate(){
     screenBlocked = !(occlHits.length && occlHits[0].object === crt.display);
     _ray.far = Infinity;
   }
-  gameObj.visible = crt.S.power && screenFacing > 0.12 && !screenBlocked;
+  /* CRT overlay stays off once the transmission owns the screen — the
+     glyph signal is the screen now, permanently. Before contact the set
+     is dark (power false), so the overlay never shows either. */
+  gameObj.visible = !crtTransmission.active && crt.S.power && screenFacing > 0.12 && !screenBlocked;
   gameDiv.style.pointerEvents = (focused === "crt") ? "auto" : "none";
-  crt.display.visible = false;
+  if(!crtTransmission.active) crt.display.visible = false;
 
   /* Laptop field terminal: same contract — hide when facing away or
      occluded so the page never floats over the back/side of the lid.
