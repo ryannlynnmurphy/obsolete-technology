@@ -29,7 +29,7 @@
     font-family:"IBM Plex Mono",monospace;
   }
   #contact-screen.visible{opacity:1;pointer-events:auto}
-  .contact-content{display:flex;flex-direction:column;align-items:center;gap:34px;transform:translateY(-2vh)}
+  .contact-content{display:flex;flex-direction:column;align-items:center;gap:clamp(10px,1.6vh,18px);width:100%;max-height:100%;padding:12px;box-sizing:border-box;transform:translateY(-1vh)}
   .contact-title{
     position:relative;margin:0;font-size:clamp(18px,2vw,30px);font-weight:500;
     letter-spacing:.12em;line-height:1;color:rgba(245,245,238,.96);white-space:nowrap;opacity:0;
@@ -42,6 +42,10 @@
   }
   .contact-email.visible{opacity:1}
   .contact-email:hover{color:rgba(255,255,248,.95);text-shadow:-1px 0 rgba(255,255,255,.1),1px 0 rgba(255,255,255,.08)}
+  .contact-author{margin:0;color:rgba(225,225,218,.48);font-size:clamp(9px,.72vw,11px);font-weight:400;letter-spacing:.2em;opacity:0;transition:opacity 600ms ease}
+  .contact-author.visible{opacity:1}
+  .contact-game{display:block;width:min(84vw,54vh,440px);height:min(84vw,54vh,440px);max-width:100%;flex:0 1 auto;border:1px solid rgba(225,225,218,.16);background:#030805;opacity:0;pointer-events:none;transition:opacity 700ms ease}
+  .contact-game.visible{opacity:1;pointer-events:auto}
   .contact-title::before,.contact-title::after{
     content:attr(data-text);position:absolute;inset:0;opacity:0;pointer-events:none;
   }
@@ -80,7 +84,9 @@
 <div id="contact-screen">
   <div class="contact-content">
     <h1 class="contact-title" data-text="MAKE CONTACT <3">MAKE CONTACT &lt;3</h1>
+    <p class="contact-author">RYANN LYNN MURPHY</p>
     <a class="contact-email" href="mailto:ryannlynncontact@gmail.com">ryannlynncontact@gmail.com</a>
+    <iframe id="signal-games" class="contact-game" title="Signal Games arcade: three playable games" loading="lazy"></iframe>
   </div>
 </div>
 <div id="err" style="display:none;position:fixed;top:12px;left:12px;max-width:60ch;z-index:99;background:#3a0d0d;color:#ffd7d7;font:12px/1.5 monospace;padding:10px 12px;border-radius:8px;white-space:pre-wrap"></div>
@@ -278,7 +284,10 @@ function startShot(){
   contactShown = false;
   contactScreen.classList.remove("visible");
   contactTitle.classList.remove("resolve");
+  contactAuthor.classList.remove("visible");
   contactEmail.classList.remove("visible");
+  contactGame.classList.remove("visible");
+  contactGame.removeAttribute("src");
   ufoFlightRig.visible = true;
   beam.group.visible = true;
   controls.enabled = false;
@@ -290,14 +299,19 @@ function startShot(){
    gone and the void is black again. */
 const contactScreen = document.getElementById("contact-screen");
 const contactTitle = contactScreen.querySelector(".contact-title");
+const contactAuthor = contactScreen.querySelector(".contact-author");
 const contactEmail = contactScreen.querySelector(".contact-email");
+const contactGame = document.getElementById("signal-games");
 let contactShown = false;
 function showContactScreen(){
   if(contactShown) return;
   contactShown = true;
   contactScreen.classList.add("visible");
+  contactGame.src = "./signal-games.html";
   setTimeout(() => { contactTitle.classList.add("resolve"); }, 1800);
+  setTimeout(() => { contactAuthor.classList.add("visible"); }, 2600);
   setTimeout(() => { contactEmail.classList.add("visible"); }, 3300);
+  setTimeout(() => { contactGame.classList.add("visible"); }, 3900);
 }
 
 /* Chapter mode (embedded in the story controller) waits for the parent's
