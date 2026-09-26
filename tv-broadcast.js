@@ -47,6 +47,7 @@ export function createTVBroadcast({ canvas, context, texture, screenMaterial, dr
   let headlines = [];
   let newsError = false;
   let newsFetchedAt = 0;
+  let newsStart = 0;
 
   async function fetchNews() {
     if (Date.now() - newsFetchedAt < 300000) return;
@@ -105,7 +106,7 @@ export function createTVBroadcast({ canvas, context, texture, screenMaterial, dr
     video.src = CHANNELS[channel].url;
     video.load();
     play();
-    if (CHANNELS[channel].news) fetchNews();
+    if (CHANNELS[channel].news) { newsStart = performance.now(); fetchNews(); }
   }
 
   video.addEventListener('playing', () => { if (powered) state = 'playing'; });
@@ -184,9 +185,20 @@ export function createTVBroadcast({ canvas, context, texture, screenMaterial, dr
       try {
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
         if (CHANNELS[channel].news) {
-          const headline = headlines.length ? headlines[Math.floor(now / 6500) % headlines.length] :
+          const headline = headlines.length ? headlines[Math.floor((now - newsStart) / 18000) % headlines.length] :
             (newsError ? 'NEWS FEED UNAVAILABLE' : 'FETCHING BBC WORLD NEWS...');
-          label(`BBC NEWS: ${headline.slice(0, 37)}`);
+          const ticker = `BBC NEWS: ${headline}`;
+          context.fillStyle = 'rgba(0,0,0,.85)';
+          context.fillRect(0, canvas.height - 24, canvas.width, 24);
+          context.fillStyle = '#e6e8d9';
+          context.font = 'bold 10px monospace';
+          const x = canvas.width - ((now - newsStart) % 18000) * .06;
+          context.save();
+          context.beginPath();
+          context.rect(0, canvas.height - 24, canvas.width, 24);
+          context.clip();
+          context.fillText(ticker, x, canvas.height - 8);
+          context.restore();
           context.fillStyle = 'rgba(0,0,0,.78)';
           context.fillRect(0, 0, canvas.width, 15);
           context.fillStyle = '#eee9da';
