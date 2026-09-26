@@ -503,6 +503,9 @@ function buildTV(){
     });
     ctx.font='600 17px Georgia,serif'; ctx.fillStyle='#c99a4e';
     ctx.fillText('VHF',128,172);
+    ctx.font='600 10px Georgia,serif';
+    ctx.fillText('OFF',83,199);
+    ctx.fillText('U',173,199);
     ctx.font='600 16px Georgia,serif';
     ctx.fillText('UHF',128,282);
     ctx.fillStyle='rgba(230,190,120,.9)';
@@ -604,15 +607,24 @@ function buildTV(){
         tick.position.set(Math.cos(a)*radius*0.98,Math.sin(a)*radius*0.98,0);
         grp.add(tick);
       }
+    }else{
+      const marker=new THREE.Mesh(new THREE.BoxGeometry(radius*0.22,radius*0.6,0.012),
+        new THREE.MeshStandardMaterial({color:0x3b2412,roughness:.55}));
+      marker.position.set(0,radius*0.2,depth*0.53);
+      grp.add(marker);
     }
+    const hit=new THREE.Mesh(new THREE.CircleGeometry(Math.max(0.14,radius*1.1),24),
+      new THREE.MeshBasicMaterial({transparent:true,opacity:0,depthWrite:false}));
+    hit.position.z=depth*0.85;
+    grp.add(hit);
     grp.position.set(x,y,1.06);
     tv.add(grp);
     return grp;
   }
-  const powerDial = dial(1.85,2.78,0.20,0.13,true);
-  const channelDial = dial(1.85,2.32,0.15,0.10,true);
+  const vhfDial = dial(1.85,2.78,0.20,0.13,true);
+  const uhfDial = dial(1.85,2.32,0.15,0.10,true);
   const volumeDial = dial(1.85,1.76,0.09,0.08,false);
-  dial(1.85,1.44,0.09,0.08,false);
+  const brightDial = dial(1.85,1.44,0.09,0.08,false);
   const ring = new THREE.Mesh(new THREE.TorusGeometry(0.26,0.014,10,48),bronze);
   ring.position.set(1.85,2.78,1.06); tv.add(ring);
 
@@ -698,15 +710,13 @@ function buildTV(){
     }
     sctx.putImageData(img,0,0);
     staticTex.needsUpdate=true;
-    screenInnerMaterial.emissiveIntensity = powered?1.35:0.12;
   }
   drawStatic();
   function togglePower(){
     powered=!powered;
-    powerDial.rotation.z+=Math.PI*0.34;
     drawStatic();
   }
-  return {group:tv, innerScreen, glass, powerDial, channelDial, volumeDial,
+  return {group:tv, innerScreen, glass, vhfDial, uhfDial, volumeDial, brightDial,
     staticCanvas, staticTex, staticContext:sctx, drawStatic, togglePower,
     screenW:2.85, screenH:1.78, screenMat:screenInnerMaterial,
     get powered(){return powered;}};
@@ -723,6 +733,25 @@ const tvBroadcast = createTVBroadcast({
   screenMaterial:tvd.screenMat, drawStatic:tvd.drawStatic,
 });
 tvBroadcast.powerOn();
+let tvKeyboard = null;
+function syncTVControls(){
+  const vhf=tvBroadcast.vhf;
+  tvd.vhfDial.rotation.z = THREE.MathUtils.degToRad(vhf===1?160:vhf===14?-160:135-(vhf-2)*270/11);
+  tvd.uhfDial.rotation.z = THREE.MathUtils.degToRad(150-tvBroadcast.uhf*300);
+  tvd.volumeDial.rotation.z = THREE.MathUtils.degToRad(135-tvBroadcast.volume*270);
+  tvd.brightDial.rotation.z = THREE.MathUtils.degToRad(135-tvBroadcast.brightness*270);
+  if(tvKeyboard) tvKeyboard.sync();
+}
+function setTVControl(id,value){
+  if(id==="vhf"){
+    tvBroadcast.setVHF(value);
+    if(tvd.powered !== (tvBroadcast.vhf!==1)) tvd.togglePower();
+  }else if(id==="uhf") tvBroadcast.setUHF(value);
+  else if(id==="volume") tvBroadcast.setVolume(value);
+  else if(id==="bright") tvBroadcast.setBrightness(value);
+  syncTVControls();
+}
+syncTVControls();
 
 const crtFlight = new THREE.Group(); crtFlight.add(crt.group); scene.add(crtFlight);
 const lapFlight = new THREE.Group(); lapFlight.add(lap.group); scene.add(lapFlight);
@@ -1143,6 +1172,76 @@ let downInfo = null;         // pending click (screen focus vs orbit-drag decisi
 let lastHoverXY = null;      // last pointer position, for hover-cursor refresh
 let savedOrbitPos = null, savedOrbitTgt = null; // return spot after focus
 let orbitDrag = null;        // active empty-space drag → orbit (not a click)
+let controlDrag = null;
+
+const tvControlGroup=document.createElement("div");
+tvControlGroup.setAttribute("role","group");
+tvControlGroup.setAttribute("aria-label","Television front panel");
+tvControlGroup.style.cssText="position:fixed;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap";
+const tvControlHint=document.createElement("div");
+tvControlHint.style.cssText="display:none;position:fixed;left:50%;bottom:17px;transform:translateX(-50%);z-index:12;color:#e2c999;background:rgba(18,9,4,.82);padding:6px 11px;font:11px Georgia,serif;letter-spacing:.08em;pointer-events:none";
+document.body.append(tvControlGroup,tvControlHint);
+const tvInputs={};
+let activeTVControl="vhf";
+for(const [id,name,min,max,step] of [
+  ["vhf","VHF channel selector",1,14,1],
+  ["uhf","UHF continuous tuning",0,1000,1],
+  ["volume","TV volume",0,100,1],
+  ["bright","TV picture brightness",0,100,1],
+]){
+  const input=document.createElement("input");
+  input.type="range"; input.min=min; input.max=max; input.step=step;
+  input.tabIndex=-1;
+  input.setAttribute("aria-label",name);
+  input.addEventListener("focus",()=>{activeTVControl=id;tvKeyboard.sync();});
+  input.addEventListener("input",()=>setTVControl(id,id==="vhf"?Number(input.value):id==="uhf"?Number(input.value)/1000:Number(input.value)/100));
+  tvControlGroup.appendChild(input); tvInputs[id]=input;
+}
+tvKeyboard={
+  sync(){
+    const values={vhf:tvBroadcast.vhf,uhf:Math.round(tvBroadcast.uhf*1000),
+      volume:Math.round(tvBroadcast.volume*100),bright:Math.round(tvBroadcast.brightness*100)};
+    for(const [id,input] of Object.entries(tvInputs)){
+      input.value=values[id];
+      const spoken=id==="vhf"?(values.vhf===1?"Off":values.vhf===14?"UHF band":`Channel ${values.vhf}`):
+        id==="uhf"?`UHF channel ${Math.round(14+tvBroadcast.uhf*55)}`:`${values[id]} percent`;
+      input.setAttribute("aria-valuetext",spoken);
+    }
+    const current=tvInputs[activeTVControl];
+    tvControlHint.textContent=`${current.getAttribute("aria-label")}: ${current.getAttribute("aria-valuetext")}  ·  Tab selects · arrows turn`;
+  },
+  show(){
+    for(const input of Object.values(tvInputs))input.tabIndex=0;
+    tvControlHint.style.display="block";this.sync();tvInputs.vhf.focus({preventScroll:true});
+  },
+  hide(){
+    tvControlHint.style.display="none";
+    if(tvControlGroup.contains(document.activeElement))document.activeElement.blur();
+    for(const input of Object.values(tvInputs))input.tabIndex=-1;
+  },
+  focus(id){tvInputs[id].focus({preventScroll:true});},
+};
+tvKeyboard.sync();
+
+const tvDialGroups={vhf:tvd.vhfDial,uhf:tvd.uhfDial,volume:tvd.volumeDial,bright:tvd.brightDial};
+function rayTVControl(e){
+  setPtr(e); _ray.setFromCamera(_ptr,camera);
+  const hit=_ray.intersectObjects(Object.values(tvDialGroups),true)[0];
+  if(!hit)return null;
+  const front=_ray.intersectObjects([tvFlight,lapFlight,crtFlight],true)[0];
+  if(front && front.distance<hit.distance-0.001)return null;
+  let node=hit.object;
+  while(node && node!==tvd.group){
+    for(const [id,group] of Object.entries(tvDialGroups))if(node===group)return id;
+    node=node.parent;
+  }
+  return null;
+}
+function tvValue(id){return id==="vhf"?tvBroadcast.vhf:id==="uhf"?tvBroadcast.uhf:id==="volume"?tvBroadcast.volume:tvBroadcast.brightness;}
+function moveTVControl(id,start,delta){
+  if(id==="vhf")setTVControl(id,start+Math.round(delta/24));
+  else setTVControl(id,start+delta/(id==="uhf"?220:180));
+}
 
 function setPtr(e){
   _ptr.x = (e.clientX/innerWidth)*2-1;
@@ -1177,7 +1276,7 @@ function enterFocus(name){
     lap.cursorActive = false; lap.winDragging = false;
     laptopComputer.enterComputerMode(); }
   if(name==="tv"){ mesh=tvd.innerScreen; w=5.9*TV_S; h=2.8*TV_S;
-    if(!tvd.powered){ tvd.togglePower(); tvBroadcast.powerOn(); }
+    if(!tvd.powered) setTVControl("vhf",2);
     tvBroadcast.engage(); }
   const pose = computeFocusPose(mesh, w, h);
   if(name==="tv"){
@@ -1186,6 +1285,7 @@ function enterFocus(name){
     pose.pos.add(shift); pose.tgt.add(shift);
   }
   tweenCamTo(pose.pos, pose.tgt, 1.4, ()=>{});
+  if(name==="tv") tvKeyboard.show();
   /* freeze the whole scene mid-air, not just this machine */
   falling.setFrozen("crt", true);
   falling.setFrozen("laptop", true);
@@ -1198,6 +1298,7 @@ function exitFocus(){
   falling.setFrozen("tv", false);
   if(focused==="laptop"){ lap.cursorActive = false; lap.winDragging = false; }
   const wasLaptop = focused === "laptop";
+  if(focused === "tv") tvKeyboard.hide();
   focused = null;
   exitBtn.classList.remove("show");
   renderer.domElement.style.cursor = "default";
@@ -1232,7 +1333,7 @@ addEventListener("message", (e)=>{
   }
   if(m && m.type === "field-terminal-look-around" && e.source === laptopFrame.contentWindow){
     tvBroadcast.glitch(12);
-    if(!tvd.powered){ tvd.togglePower(); tvBroadcast.powerOn(); }
+    if(!tvd.powered) setTVControl("vhf",2);
     if(crtTransmission.active){
       crtTransmission.burst(12);
     }else{
@@ -1268,6 +1369,19 @@ addEventListener("keyup", (e)=>{
 });
 
 renderer.domElement.addEventListener("pointerdown", (e)=>{
+  if((!focused || focused==="tv") && !camTween && sculptureReady && !falling.isFinalDrop()){
+    const control=rayTVControl(e);
+    if(control){
+      controlDrag={id:control,pointerId:e.pointerId,x:e.clientX,y:e.clientY,
+        value:tvValue(control),moved:false};
+      downInfo=null; orbitDrag=null;
+      renderer.domElement.setPointerCapture(e.pointerId);
+      renderer.domElement.style.cursor="grabbing";
+      if(focused==="tv")tvKeyboard.focus(control);
+      e.preventDefault(); e.stopPropagation();
+      return;
+    }
+  }
   if(focused){
     /* Both overlay pages (CRT + laptop terminal) handle their own input;
        nothing to do on the outer canvas while inside. */
@@ -1288,9 +1402,18 @@ renderer.domElement.addEventListener("pointerdown", (e)=>{
   downInfo = null;
 });
 renderer.domElement.addEventListener("pointermove", (e)=>{
+  if(controlDrag){
+    if(Math.hypot(e.clientX-controlDrag.x,e.clientY-controlDrag.y)>3)controlDrag.moved=true;
+    if(controlDrag.moved)moveTVControl(controlDrag.id,controlDrag.value,controlDrag.y-e.clientY);
+    renderer.domElement.style.cursor="grabbing";
+    e.preventDefault(); return;
+  }
   // Overlay pages own the pointer while focused; the laptop terminal
   // needs no virtual-cursor driving.
-  if(focused) return;
+  if(focused){
+    renderer.domElement.style.cursor=focused==="tv" && rayTVControl(e)?"pointer":"default";
+    return;
+  }
   if(orbitDrag && !camTween && e.buttons){
     const totalMoved = Math.hypot(e.clientX-orbitDrag.x0, e.clientY-orbitDrag.y0);
     if(totalMoved > 6){
@@ -1312,9 +1435,22 @@ renderer.domElement.addEventListener("pointermove", (e)=>{
   lastHoverXY = {clientX:e.clientX, clientY:e.clientY};
   if(!orbitDrag || !orbitDrag.orbiting)
     renderer.domElement.style.cursor =
-      (!falling.isFinalDrop() && rayScreens(e)) ? "pointer" : "default";
+      (!falling.isFinalDrop() && (rayTVControl(e)||rayScreens(e))) ? "pointer" : "default";
 });
 renderer.domElement.addEventListener("pointerup", (e)=>{
+  if(controlDrag){
+    const {id,pointerId,moved}=controlDrag;
+    if(!moved){
+      const value=tvValue(id);
+      setTVControl(id,id==="vhf"?(value===14?1:value+1):
+        Math.min(1,value+(id==="uhf"?.04:.1)));
+    }
+    controlDrag=null;
+    if(renderer.domElement.hasPointerCapture(pointerId))renderer.domElement.releasePointerCapture(pointerId);
+    renderer.domElement.style.cursor=rayTVControl(e)?"pointer":"default";
+    e.preventDefault(); e.stopPropagation();
+    return;
+  }
   const wasOrbiting = orbitDrag && orbitDrag.orbiting;
   orbitDrag = null;
   if(!wasOrbiting) renderer.domElement.style.cursor = "default";
@@ -1327,17 +1463,7 @@ renderer.domElement.addEventListener("pointerup", (e)=>{
       if(_ray.intersectObject(crt.powerButton, false).length){ crt.togglePower(); return; }
       if(!crt.S.power){ crt.togglePower(); return; }
     }else if(focused === "tv"){
-      setPtr(e); _ray.setFromCamera(_ptr, camera);
-      if(_ray.intersectObject(tvd.powerDial, true).length){
-        tvd.togglePower();
-        if(tvd.powered) tvBroadcast.powerOn(); else tvBroadcast.powerOff();
-      }else if(_ray.intersectObject(tvd.channelDial, true).length){
-        tvBroadcast.nextChannel(); tvd.channelDial.rotation.z -= Math.PI/3;
-      }else if(_ray.intersectObject(tvd.volumeDial, true).length){
-        tvBroadcast.turnVolume(); tvd.volumeDial.rotation.z += Math.PI/4;
-      }else{
-        tvBroadcast.engage();
-      }
+      tvBroadcast.engage();
     }
     lap.winDragging = false;
     return;
@@ -1350,16 +1476,29 @@ renderer.domElement.addEventListener("pointerup", (e)=>{
   downInfo = null;
 });
 renderer.domElement.addEventListener("pointercancel", (e)=>{
+  if(controlDrag && renderer.domElement.hasPointerCapture(controlDrag.pointerId))
+    renderer.domElement.releasePointerCapture(controlDrag.pointerId);
+  controlDrag=null;
   downInfo = null;
   orbitDrag = null;
   lap.winDragging = false;
 });
 renderer.domElement.addEventListener("pointerleave", ()=>{
+  if(controlDrag)return;
   lastHoverXY = null;
   orbitDrag = null;
   if(!focused) renderer.domElement.style.cursor = "default";
 });
 renderer.domElement.addEventListener("wheel", (e)=>{
+  if((!focused||focused==="tv") && sculptureReady && !falling.isFinalDrop()){
+    const control=rayTVControl(e);
+    if(control){
+      const direction=e.deltaY>0?-1:1;
+      setTVControl(control,tvValue(control)+direction*(control==="vhf"?1:control==="uhf"?.025:.05));
+      if(focused==="tv")tvKeyboard.focus(control);
+      e.preventDefault(); e.stopPropagation(); return;
+    }
+  }
   if(focused === "laptop" && lap.windowOpen){
     lap.scrollPdf(e.deltaY*.6);
     e.preventDefault();
@@ -1382,6 +1521,15 @@ window.__sculpture = {
         y: d.body ? +d.body.translation().y.toFixed(3) : null,
         type: d.body ? d.body.bodyType() : null })) };
   },
+  tv(){return { vhf:tvBroadcast.vhf, uhf:+tvBroadcast.uhf.toFixed(3),
+    band:tvBroadcast.band, program:tvBroadcast.activeProgram,
+    signal:+tvBroadcast.signalStrength.toFixed(3), state:tvBroadcast.state,
+    volume:+tvBroadcast.video.volume.toFixed(3), muted:tvBroadcast.video.muted,
+    hiss:+tvBroadcast.noiseLevel.toFixed(4),
+    brightness:tvBroadcast.brightness, screen:tvd.screenMat.color.r,
+    source:tvBroadcast.video.currentSrc, hasSource:tvBroadcast.video.hasAttribute("src"),
+    paused:tvBroadcast.video.paused, powered:tvd.powered,
+    focused, cursor:renderer.domElement.style.cursor };},
   drop(){ if(!sculptureReady) finishIntro(); fireOrbitComplete(); return falling.isFinalDrop(); },
   behind(){
     /* console-only test jump: camera to the opposite side so the facing
@@ -1464,7 +1612,7 @@ function animate(){
   if(!focused && !camTween && hoverTick % 12 === 0 && lastHoverXY){
     if(!orbitDrag || !orbitDrag.orbiting)
       renderer.domElement.style.cursor =
-        (!falling.isFinalDrop() && rayScreens(lastHoverXY)) ? "pointer" : "default";
+        (!falling.isFinalDrop() && (rayTVControl(lastHoverXY)||rayScreens(lastHoverXY))) ? "pointer" : "default";
   }
 
   /* camera flights (screen focus transitions) */
@@ -1596,10 +1744,15 @@ addEventListener("resize", ()=>{
     const m = focused==="crt" ? crt.display :
               focused==="laptop" ? lap.display : tvd.innerScreen;
     const w = focused==="crt" ? crt.screenW*CRT_S :
-              focused==="laptop" ? lap.screenW*LAP_S : tvd.screenW*TV_S;
+              focused==="laptop" ? lap.screenW*LAP_S : 5.9*TV_S;
     const h = focused==="crt" ? crt.screenH*CRT_S :
-              focused==="laptop" ? lap.screenH*LAP_S : tvd.screenH*TV_S;
+              focused==="laptop" ? lap.screenH*LAP_S : 2.8*TV_S;
     const pose = computeFocusPose(m, w, h);
+    if(focused==="tv"){
+      const cabinetCenter=tvd.group.localToWorld(new THREE.Vector3(0,2.2,1.06));
+      const shift=cabinetCenter.sub(pose.tgt);
+      pose.pos.add(shift); pose.tgt.add(shift);
+    }
     camera.position.copy(pose.pos); _tgt.copy(pose.tgt);
   }
 });
