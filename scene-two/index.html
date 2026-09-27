@@ -278,9 +278,23 @@ const clock = new THREE.Clock();
 let shotStart = null; // null = holding on the first frame behind black
 let finished = false;
 
+/* Covered-loop stop: one rAF owner. Once the opaque contact screen
+   fully covers the canvas, frames stop; replay restarts them. */
+let ufoFrameId = null;
+let contactScreenCoversScene = false;
+const ufoStats = { frames: 0, renders: 0 };
+function scheduleUfo(){
+  if(ufoFrameId === null) ufoFrameId = requestAnimationFrame(renderUfo);
+}
+function onContactScreenFullyOpaque(){
+  contactScreenCoversScene = true;
+  if(ufoFrameId !== null){ cancelAnimationFrame(ufoFrameId); ufoFrameId = null; }
+}
+
 function startShot(){
   shotStart = clock.getElapsedTime();
   finished = false;
+  contactScreenCoversScene = false; // replay restarts the loop
   contactShown = false;
   contactScreen.classList.remove("visible");
   contactTitle.classList.remove("resolve");
@@ -293,6 +307,7 @@ function startShot(){
   controls.enabled = false;
   replayBtn.style.display = "none";
   setStatus("approach — rise");
+  scheduleUfo();
 }
 
 /* Final transmission: deadpan MAKE CONTACT <3 + email, once the UFO is
@@ -308,6 +323,18 @@ function showContactScreen(){
   contactShown = true;
   contactScreen.classList.add("visible");
   contactGame.src = "./signal-games.html";
+  /* Stop only when the screen is fully opaque (1.6s transition), not
+     when the UFO leaves — the residual still needs its frames. */
+  contactScreen.addEventListener("transitionend", function onOpaque(e){
+    if(e.propertyName !== "opacity") return;
+    if(!contactScreen.classList.contains("visible")) return;
+    contactScreen.removeEventListener("transitionend", onOpaque);
+    onContactScreenFullyOpaque();
+  });
+  setTimeout(() => {
+    if(contactShown && contactScreen.classList.contains("visible"))
+      onContactScreenFullyOpaque();
+  }, 2600); // fallback if transitionend never fires
   setTimeout(() => { contactTitle.classList.add("resolve"); }, 1800);
   setTimeout(() => { contactAuthor.classList.add("visible"); }, 2600);
   setTimeout(() => { contactEmail.classList.add("visible"); }, 3300);
@@ -331,8 +358,10 @@ replayBtn.addEventListener("click", () => {
   startShot();
 });
 
-function animate() {
-  requestAnimationFrame(animate);
+function renderUfo() {
+  ufoFrameId = null;
+  if(contactScreenCoversScene) return;
+  ufoStats.frames++;
   const t = clock.getElapsedTime();
   const st = shotStart === null ? 0 : t - shotStart; // holding on frame 0 until reveal
 
@@ -472,14 +501,19 @@ function animate() {
 
   controls.update();
   composer.render();
+  ufoStats.renders++;
+  scheduleUfo();
 }
-animate();
+window.__ufo = { stats: ufoStats, get covered(){ return contactScreenCoversScene; } };
+scheduleUfo();
 
 addEventListener("resize", () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
   composer.setSize(innerWidth, innerHeight);
+  /* A covered canvas needs exactly one fresh frame for the new size. */
+  if(contactScreenCoversScene){ composer.render(); ufoStats.renders++; }
 });
 </script>
 </body>
