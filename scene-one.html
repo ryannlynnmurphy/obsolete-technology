@@ -52,12 +52,22 @@ const OVERVIEW_POS = new THREE.Vector3(0, 2, 27);
 const OVERVIEW_TGT = new THREE.Vector3(0, 2, 0);
 camera.position.copy(OVERVIEW_POS);
 camera.lookAt(OVERVIEW_TGT);
+// Preserve the desktop lens; widen the vertical lens in portrait so the
+// same sculpture fits horizontally without moving any device or orbit rig.
+function fitOverviewLens(){
+  camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(
+    Math.tan(THREE.MathUtils.degToRad(38) / 2) * Math.max(1, 1 / camera.aspect)));
+  camera.updateProjectionMatrix();
+}
+fitOverviewLens();
 
 const renderer = new THREE.WebGLRenderer({antialias:true, powerPreference:"high-performance"});
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;
+renderer.shadowMap.needsUpdate = true;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.1;
@@ -296,12 +306,18 @@ function buildLaptop(){
 
   function updateKeys(){
     const now=performance.now();
+    let changed=false;
     for(let i=0;i<keyMeshes.length;i++){
       const m=keyMeshes[i];
       const down=m.userData.held||now<m.userData.pressedUntil;
       const target=down?m.userData.baseY-KB_TRAVEL:m.userData.baseY;
-      m.position.y+=(target-m.position.y)*.4;
+      if(m.position.y!==target){
+        const delta=target-m.position.y;
+        m.position.y = Math.abs(delta)<1e-6 ? target : m.position.y+delta*.4;
+        changed=true;
+      }
     }
+    return changed;
   }
   return {group:laptop, display, updateKeys, flashKey, keyByCode,
     screenW:5.75, screenH:3.15};
@@ -609,6 +625,7 @@ function syncTVControls(){
   if(tvKeyboard) tvKeyboard.sync();
 }
 function setTVControl(id,value){
+  renderer.shadowMap.needsUpdate = true;
   if(id==="vhf"){
     tvBroadcast.setVHF(value);
     if(tvd.powered !== (tvBroadcast.vhf!==1)) tvd.togglePower();
@@ -630,6 +647,14 @@ lap.group.scale.setScalar(LAP_S);
 tvd.group.scale.setScalar(TV_S);
 tvd.group.position.y = -0.55;
 scene.add(tvFlight);
+// Three's mesh raycast can reject an entire geometry by its local box
+// before testing triangles. Rounded cabinets otherwise only have spheres.
+for(const flight of [crtFlight, lapFlight, tvFlight]){
+  flight.traverse(object => {
+    if(object.isMesh && object.geometry && !object.geometry.boundingBox)
+      object.geometry.computeBoundingBox();
+  });
+}
 /* hidden until Rapier boots and spawns them — the void starts empty */
 crtFlight.visible = false; lapFlight.visible = false; tvFlight.visible = false;
 
@@ -726,6 +751,9 @@ laptopMaskCanvas.width = LAPTOP_OS_W;
 laptopMaskCanvas.height = LAPTOP_OS_H;
 const laptopMask = laptopMaskCanvas.getContext("2d");
 const LAPTOP_MASK_COLS = 32, LAPTOP_MASK_ROWS = 18;
+const laptopMaskCamera = new THREE.Vector3(Infinity, Infinity, Infinity);
+const laptopMaskWorld = new THREE.Matrix4();
+let laptopMaskValid = false;
 function laptopScreenVisibleAt(u, v){
   _sv4.set((u - 0.5) * lap.screenW, (0.5 - v) * lap.screenH, 0);
   lap.display.localToWorld(_sv4);
@@ -740,6 +768,14 @@ function updateLaptopScreenMask(){
   /* CSS3D renders above WebGL. Mask only the screen pixels whose first
      3D hit is the laptop display, so other devices can cover the live
      terminal without revealing another desktop underneath. */
+  // A fixed sculpture and camera produce the same mask. Key travel is
+  // excluded from this cache because it never reaches the display plane.
+  lap.display.updateWorldMatrix(true, false);
+  if(laptopMaskValid && sculptureReady && !falling.isFinalDrop() &&
+      laptopMaskCamera.equals(camera.position) && laptopMaskWorld.equals(lap.display.matrixWorld)) return;
+  laptopMaskCamera.copy(camera.position);
+  laptopMaskWorld.copy(lap.display.matrixWorld);
+  laptopMaskValid = true;
   let fullyClear = true;
   for(const u of [0.02, 0.26, 0.5, 0.74, 0.98]){
     for(const v of [0.02, 0.26, 0.5, 0.74, 0.98]){
@@ -1075,8 +1111,14 @@ function computeFocusPose(mesh, w, h){
   if(side.lengthSq() < 1e-6) side.set(1,0,0); else side.normalize();
   const vFov = THREE.MathUtils.degToRad(camera.fov);
   const hFov = 2*Math.atan(Math.tan(vFov/2)*camera.aspect);
-  const fitH = (h/2)/Math.tan(vFov/2)/0.90;
-  const fitW = (w/2)/Math.tan(hFov/2)/0.92;
+  // The camera stays upright, so a tilted screen occupies more than w × h.
+  const screenX = new THREE.Vector3(1,0,0).applyQuaternion(q);
+  const screenY = new THREE.Vector3(0,1,0).applyQuaternion(q);
+  const cameraUp = new THREE.Vector3().crossVectors(side, normal).normalize();
+  const projectedW = Math.abs(side.dot(screenX))*w + Math.abs(side.dot(screenY))*h;
+  const projectedH = Math.abs(cameraUp.dot(screenX))*w + Math.abs(cameraUp.dot(screenY))*h;
+  const fitH = (projectedH/2)/Math.tan(vFov/2)/0.90;
+  const fitW = (projectedW/2)/Math.tan(hFov/2)/0.92;
   const dist = THREE.MathUtils.clamp(Math.max(fitH,fitW), 2, 14);
   const pos = center.clone()
     .addScaledVector(normal, dist)
@@ -1480,6 +1522,9 @@ function animate(){
   if(hidden) return;
   const dt = Math.min(clock.getDelta(), 0.05);
   const t = clock.elapsedTime;
+  // Camera movement does not change this fixed light's shadow map.
+  // Refresh it for the intro, release, keys and physical dial changes.
+  if(!sculptureReady || falling.isFinalDrop()) renderer.shadowMap.needsUpdate = true;
 
   /* Fall-in: hand-flown ballistic drop, then a hard freeze that hands
      the exact transforms to physics. */
@@ -1562,7 +1607,7 @@ function animate(){
   camera.lookAt(_tgt);
 
   /* Keep the physical keys and the other live screens updated. */
-  lap.updateKeys();
+  if(lap.updateKeys()) renderer.shadowMap.needsUpdate = true;
   tvBroadcast.update(performance.now());
   if(softieGlitchUntil > 0) updateSoftieGlitch(performance.now());
 
@@ -1625,7 +1670,7 @@ animate();
 
 addEventListener("resize", ()=>{
   camera.aspect = innerWidth/innerHeight;
-  camera.updateProjectionMatrix();
+  fitOverviewLens();
   renderer.setSize(innerWidth, innerHeight);
   cssRenderer.setSize(innerWidth, innerHeight);
   if(focused){
