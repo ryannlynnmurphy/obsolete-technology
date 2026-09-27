@@ -83,7 +83,7 @@
 
   /* windows */
   #windowLayer{position:absolute;inset:0 0 var(--task-h) 0;pointer-events:none}
-  .os-window{position:absolute;min-width:260px;min-height:150px;background:var(--silver);border:2px solid #fff;border-right-color:#202020;border-bottom-color:#202020;box-shadow:2px 3px 0 rgba(0,0,0,.24);pointer-events:auto;display:flex;flex-direction:column;overflow:hidden}
+  .os-window{position:absolute;min-width:260px;min-height:150px;max-width:100%;max-height:100%;background:var(--silver);border:2px solid #fff;border-right-color:#202020;border-bottom-color:#202020;box-shadow:2px 3px 0 rgba(0,0,0,.24);pointer-events:auto;display:flex;flex-direction:column;overflow:hidden}
   .os-window.inactive .titlebar{background:#7f7f7f}
   .titlebar{height:27px;flex:0 0 27px;background:linear-gradient(90deg,var(--blue),var(--blue-2));color:#fff;display:flex;align-items:center;padding:2px 3px 2px 5px;font-weight:700;cursor:default;touch-action:none}
   .title-icon{width:16px;height:16px;margin-right:5px;display:grid;place-items:center;font-size:12px}
@@ -232,8 +232,11 @@
 
   function clampWindow(state){
     const b=maxBounds();
-    state.w=Math.max(state.minW,Math.min(state.w,b.w));
-    state.h=Math.max(state.minH,Math.min(state.h,b.h));
+    /* Restored windows must fit the viewport: effective minimums yield
+       to a narrower layer (390px phones vs 620px Solitaire default). */
+    const minW=Math.min(state.minW,b.w), minH=Math.min(state.minH,b.h);
+    state.w=Math.max(minW,Math.min(state.w,b.w));
+    state.h=Math.max(minH,Math.min(state.h,b.h));
     state.x=Math.max(0,Math.min(state.x,Math.max(0,b.w-state.w)));
     state.y=Math.max(0,Math.min(state.y,Math.max(0,b.h-32)));
   }
