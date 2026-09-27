@@ -615,6 +615,10 @@ const tvBroadcast = createTVBroadcast({
   screenMaterial:tvd.screenMat, drawStatic:tvd.drawStatic,
 });
 tvBroadcast.powerOn();
+/* Async video transitions (playing/ended/error/stalled) draw outside
+   any event handler — wake the loop so the new state uploads. */
+for(const ev of ["playing", "ended", "error", "stalled"])
+  tvBroadcast.video.addEventListener(ev, ()=>requestRender());
 let tvKeyboard = null;
 function syncTVControls(){
   const vhf=tvBroadcast.vhf;
@@ -626,6 +630,7 @@ function syncTVControls(){
 }
 function setTVControl(id,value){
   renderer.shadowMap.needsUpdate = true;
+  requestRender(); // dial needles are visible geometry
   if(id==="vhf"){
     tvBroadcast.setVHF(value);
     if(tvd.powered !== (tvBroadcast.vhf!==1)) tvd.togglePower();
@@ -715,10 +720,12 @@ const crtTransmission = createCRTTransmission({
 function onAlienContactEstablished(){
   if(crtTransmission.active) return;
   /* Signal propagation beat: the laptop finishes first, then ~380ms
-     later the CRT suddenly receives it. Total ~0.5s after YES. */
+     later the CRT suddenly receives it. Total ~0.5s after YES.
+     The loop may be stopped here, so wake it explicitly. */
   setTimeout(() => {
     if(!crt.S.power) crt.togglePower(); /* signal wakes a powered-off set */
     crtTransmission.activate();
+    requestRender();
   }, 380);
 }
 window.addEventListener("alien-contact-established", onAlienContactEstablished);
@@ -1239,6 +1246,7 @@ function enterFocus(name){
   }
   tweenCamTo(pose.pos, pose.tgt, 1.4, ()=>{});
   if(name==="tv") tvKeyboard.show();
+  requestRender(); // camera flight renders via the tween, focus state now
   /* freeze the whole scene mid-air, not just this machine */
   falling.setFrozen("crt", true);
   falling.setFrozen("laptop", true);
@@ -1262,6 +1270,7 @@ function exitFocus(){
   tweenCamTo(backP, backT, 1.25, ()=>{ syncOrbitFromCamera(); prevAzimuth = azimuthOf(); });
   computer.exitComputerMode();
   if(wasLaptop) laptopComputer.exitComputerMode();
+  requestRender(); // return flight renders via the tween
 }
 exitBtn.addEventListener("click", exitFocus);
 
@@ -1277,10 +1286,12 @@ addEventListener("message", (e)=>{
   const m = e?.data;
   if(m && m.type === "field-terminal-flash" && typeof m.code === "string"){
     lap.flashKey(m.code);
+    requestRender(); // 3D key dip needs frames
   }
   /* Laptop reports successful alien contact (Y branch only). The CRT
      listens: after a short propagation delay it wakes permanently. */
   if(m && m.type === "alien-contact-established"){
+    requestRender(); // propagation timeout wakes again on arrival
     window.dispatchEvent(new CustomEvent("alien-contact-established"));
   }
   if(m && m.type === "field-terminal-look-around" && e.source === laptopFrame.contentWindow){
@@ -1292,9 +1303,11 @@ addEventListener("message", (e)=>{
       if(!crt.S.power) crt.togglePower();
       softieGlitchUntil = performance.now() + 12000;
     }
+    requestRender(); // glitch span renders via updateScene, starts here
   }
 });
 addEventListener("keydown", (e)=>{
+  requestRender(); // Space drops; laptop keys dip in 3D
   if(e.key === "Escape"){
     if(focused){ exitFocus(); return; }
     return;
@@ -1316,10 +1329,12 @@ addEventListener("keydown", (e)=>{
   }
 });
 addEventListener("keyup", (e)=>{
+  requestRender(); // released 3D keys rise back
   const m = lap.keyByCode[e.code]; if(m) m.userData.held = false;
 });
 
 renderer.domElement.addEventListener("pointerdown", (e)=>{
+  requestRender(); // every press may orbit, focus, or turn a dial
   if((!focused || focused==="tv") && !camTween && sculptureReady && !falling.isFinalDrop()){
     const control=rayTVControl(e);
     if(control){
@@ -1353,6 +1368,7 @@ renderer.domElement.addEventListener("pointerdown", (e)=>{
   downInfo = null;
 });
 renderer.domElement.addEventListener("pointermove", (e)=>{
+  requestRender(); // drags orbit; hovers re-test affordance
   if(controlDrag){
     if(Math.hypot(e.clientX-controlDrag.x,e.clientY-controlDrag.y)>3)controlDrag.moved=true;
     if(controlDrag.moved)moveTVControl(controlDrag.id,controlDrag.value,controlDrag.y-e.clientY);
@@ -1389,6 +1405,7 @@ renderer.domElement.addEventListener("pointermove", (e)=>{
       (!falling.isFinalDrop() && (rayTVControl(e)||rayScreens(e))) ? "pointer" : "default";
 });
 renderer.domElement.addEventListener("pointerup", (e)=>{
+  requestRender(); // click-vs-drag decision lands here
   if(controlDrag){
     const {id,pointerId,moved}=controlDrag;
     if(!moved){
@@ -1439,6 +1456,7 @@ renderer.domElement.addEventListener("pointerleave", ()=>{
   if(!focused) renderer.domElement.style.cursor = "default";
 });
 renderer.domElement.addEventListener("wheel", (e)=>{
+  requestRender(); // dial turns move 3D needles
   if((!focused||focused==="tv") && sculptureReady && !falling.isFinalDrop()){
     const control=rayTVControl(e);
     if(control){
@@ -1496,11 +1514,34 @@ window.__sculpture = {
   },
   intro(){ return { ready: sculptureReady, t: +introT.toFixed(3),
     flights: [...introMotions].map(([g, m]) => ({ y: +g.position.y.toFixed(2) })) }; },
+  renderStats(){ return { ...renderStats }; },
 };
 
 /* ============================================================
-   MAIN LOOP — controller steps physics, Three.js renders
+   DEMAND SCHEDULER — single owner of requestAnimationFrame.
+   Both renderers sit behind requestRender(). The opening fall-in,
+   the final drop, camera flights, live screens and effect tails
+   keep frames flowing; a frozen sculpture with no live screen
+   submits no frames at all. Every visual mutation must call
+   requestRender() — a stopped loop cannot poll for new flags.
    ============================================================ */
+const renderStats = { ticks: 0, webgl: 0, css: 0 };
+let rafId = null;
+let schedulerDirty = true;
+let lastGameVisible = null;
+let lastLaptopVisible = null;
+let lastLaptopBlocked = null;
+const _lastCamPos = new THREE.Vector3(Infinity, Infinity, Infinity);
+function requestRender(){
+  schedulerDirty = true;
+  if(rafId === null) rafId = requestAnimationFrame(frame);
+}
+/* True while every spawned body exists — only then may the loop
+   skip physics (bodies are Fixed; meshes own their transforms). */
+function allBodiesSpawned(){
+  return falling.devices.length === 3 &&
+    falling.devices.every((d) => d.spawned && d.body);
+}
 const clock = new THREE.Clock();
 let hidden = false;
 let staticAcc = 0;
@@ -1508,7 +1549,10 @@ let hoverTick = 0;
 let occlTick = 0;
 let screenBlocked = false;
 let laptopBlocked = true;
-document.addEventListener("visibilitychange", ()=>{ hidden = document.hidden; });
+document.addEventListener("visibilitychange", ()=>{
+  hidden = document.hidden;
+  if(!hidden) requestRender(); // restart the loop on tab return
+});
 
 /* Frame the sculpture on load: pull the orbit rig onto the composed
    trio so the opening view is intentional, not a leftover wide shot. */
@@ -1517,11 +1561,34 @@ _tgt.copy(ORBIT_TGT);
 prevAzimuth = azimuthOf();
 visitedSectors.add(sectorOf(prevAzimuth));
 
-function animate(){
-  requestAnimationFrame(animate);
-  if(hidden) return;
+function frame(){
+  rafId = null;
+  /* rAF does not fire while hidden; this preserves the old
+     schedule-then-check semantics for the odd wakeup race. */
+  if(hidden){ rafId = requestAnimationFrame(frame); return; }
+  renderStats.ticks++;
+  const moving = updateScene(performance.now());
+  if(moving || schedulerDirty){
+    renderer.render(scene, camera);
+    cssRenderer.render(scene, camera);
+    renderStats.webgl++;
+    renderStats.css++;
+    schedulerDirty = false;
+  }
+  /* The TV is a live screen from boot: keep the loop warm so its
+     25fps draws upload, but renders still only happen on draws. */
+  if(moving || schedulerDirty || tvd.powered) rafId = requestAnimationFrame(frame);
+}
+
+/* updateScene advances simulation, camera and effects. Returns true
+   while motion still needs frames (and therefore a render). */
+function updateScene(now){
+  let moving = false;
+  const wasDirty = schedulerDirty;
   const dt = Math.min(clock.getDelta(), 0.05);
   const t = clock.elapsedTime;
+  const cameraMoved = camera.position.distanceToSquared(_lastCamPos) > 1e-12;
+  if(cameraMoved) _lastCamPos.copy(camera.position);
   // Camera movement does not change this fixed light's shadow map.
   // Refresh it for the intro, release, keys and physical dial changes.
   if(!sculptureReady || falling.isFinalDrop()) renderer.shadowMap.needsUpdate = true;
@@ -1543,9 +1610,25 @@ function animate(){
     }
   }
 
-  falling.update(dt);
-  crtEffect.update(dt);
-  crtTransmission.update(dt);
+  if(!sculptureReady || falling.isFinalDrop() || !allBodiesSpawned()){
+    /* Intro, release, or pre-spawn: physics owns time. Once the
+       sculpture stands with all bodies Fixed, meshes are
+       authoritative and stepping the world only burns CPU. */
+    falling.update(dt);
+    moving = true;
+  }
+  /* CRT glass: advances only on frames we already render (or while a
+     latency dip is settling). The ±1.2% breathing was measured at
+     0.008/255 mean frame delta over half a period vs 0.004 noise —
+     imperceptible — so pausing it while fully idle changes nothing
+     visible. The latency dip always wakes the loop via requestRender
+     at triggerLag time and plays its full tail here. */
+  if(moving || wasDirty || crtEffect.lag > 0.001){
+    crtEffect.update(dt);
+    crtTransmission.update(dt);
+  }
+  if(crtEffect.lag > 0.001) moving = true;
+  if(crtTransmission.active) moving = true;
 
   /* Freeze authority: capture once spawned, then assert immutability. */
   frozenAuthority.frame++;
@@ -1554,9 +1637,11 @@ function animate(){
     if(frozenAuthority.frame % 30 === 0) assertFrozenAuthority("orbit-frame-" + frozenAuthority.frame);
   }
 
-  /* Hover affordance refresh: re-test periodically while orbiting. */
+  /* Hover affordance refresh: re-test periodically while orbiting.
+     Skipped when nothing moved — cursor state cannot have changed. */
   hoverTick++;
-  if(!focused && !camTween && hoverTick % 12 === 0 && lastHoverXY){
+  if(!focused && !camTween && hoverTick % 12 === 0 && lastHoverXY &&
+     (cameraMoved || moving || wasDirty)){
     if(!orbitDrag || !orbitDrag.orbiting)
       renderer.domElement.style.cursor =
         (!falling.isFinalDrop() && (rayTVControl(lastHoverXY)||rayScreens(lastHoverXY))) ? "pointer" : "default";
@@ -1564,6 +1649,7 @@ function animate(){
 
   /* camera flights (screen focus transitions) */
   if(camTween){
+    moving = true;
     camTween.t += dt/camTween.dur;
     const k = easeIO(Math.min(1, camTween.t));
     camera.position.lerpVectors(camTween.p0, camTween.p1, k);
@@ -1575,7 +1661,11 @@ function animate(){
       if(!focused) { syncOrbitFromCamera(); prevAzimuth = azimuthOf(); }
     }
   } else {
+    /* While a drag or dial actively moves the camera the loop is kept
+       alive by the event wakes; flag motion so it also renders. */
+    if((orbitDrag && orbitDrag.orbiting) || controlDrag) moving = true;
     if(verifyOrbit && !focused && !falling.isFinalDrop()){
+      moving = true;
       /* Scripted 360: camera only, devices must hold Δ=0. */
       orbitTheta += (Math.PI * 2) / 720; // full camera turn over 720 frames (~12s)
       applyOrbitToCamera();
@@ -1604,12 +1694,18 @@ function animate(){
       noteAzimuthSample(azimuthOf());
     }
   }
-  camera.lookAt(_tgt);
+  if(moving || wasDirty || cameraMoved) camera.lookAt(_tgt);
 
   /* Keep the physical keys and the other live screens updated. */
-  if(lap.updateKeys()) renderer.shadowMap.needsUpdate = true;
-  tvBroadcast.update(performance.now());
-  if(softieGlitchUntil > 0) updateSoftieGlitch(performance.now());
+  if(lap.updateKeys()){
+    renderer.shadowMap.needsUpdate = true;
+    schedulerDirty = true; // key travel is visible geometry motion
+  }
+  if(tvBroadcast.update(now)) schedulerDirty = true; // live TV draw uploads on render
+  if(softieGlitchUntil > now){
+    updateSoftieGlitch(now);
+    moving = true; // 12s authored glitch span runs its course, then stops
+  }
 
   /* the CRT belongs to the game page: overlay on while powered,
      canvas display stays dark glass behind it.
@@ -1625,7 +1721,8 @@ function animate(){
   _sv3.copy(camera.position).sub(_sv1).normalize();
   const screenFacing = _sv2.dot(_sv3);
   occlTick++;
-  if(screenFacing > 0.12 && occlTick % 6 === 0){
+  if(screenFacing > 0.12 && occlTick % 6 === 0 &&
+     (cameraMoved || moving || wasDirty)){
     _sv3.copy(_sv1).sub(camera.position);
     const screenDist = _sv3.length();
     _ray.set(camera.position, _sv3.normalize());
@@ -1638,6 +1735,10 @@ function animate(){
      permanently once the laptop establishes contact. */
   gameObj.visible = !crtTransmission.active && crt.S.power && screenFacing > 0.12 && !screenBlocked;
   gameDiv.style.pointerEvents = (!crtTransmission.active && focused === "crt") ? "auto" : "none";
+  if(gameObj.visible !== lastGameVisible){
+    lastGameVisible = gameObj.visible;
+    schedulerDirty = true; // CSS3D visibility applies on render
+  }
   if(!crtTransmission.active) crt.display.visible = false;
 
   /* Laptop field terminal follows the visible part of its physical screen. */
@@ -1646,14 +1747,24 @@ function animate(){
   _sv2.set(0, 0, 1).applyQuaternion(_sq1);
   _sv3.copy(camera.position).sub(_sv1).normalize();
   const laptopFacing = _sv2.dot(_sv3);
-  if(laptopFacing > 0.12 && occlTick % 6 === 0){
+  if(laptopFacing > 0.12 && occlTick % 6 === 0 &&
+     (cameraMoved || moving || wasDirty || !laptopMaskValid)){
     updateLaptopScreenMask();
+    if(laptopBlocked !== lastLaptopBlocked){
+      lastLaptopBlocked = laptopBlocked;
+      schedulerDirty = true;
+    }
   }
   laptopObj.visible = laptopFacing > 0.12 && !laptopBlocked;
   laptopDiv.style.pointerEvents = (focused === "laptop") ? "auto" : "none";
+  if(laptopObj.visible !== lastLaptopVisible){
+    lastLaptopVisible = laptopObj.visible;
+    schedulerDirty = true;
+  }
 
-  renderer.render(scene, camera);
-  cssRenderer.render(scene, camera);
+  /* A shadow refresh without a render would never upload. */
+  if(renderer.shadowMap.needsUpdate) schedulerDirty = true;
+  return moving;
 }
 /* ?orbit360 — headless self-check: once frozen, auto-orbit the camera a
    full turn and log VERIFY 360 PASS/FAIL to the console. */
@@ -1666,13 +1777,14 @@ if(new URLSearchParams(location.search).has("orbit360")){
   }, 250);
   setTimeout(() => clearInterval(t0), 60000);
 }
-animate();
+requestRender();
 
 addEventListener("resize", ()=>{
   camera.aspect = innerWidth/innerHeight;
   fitOverviewLens();
   renderer.setSize(innerWidth, innerHeight);
   cssRenderer.setSize(innerWidth, innerHeight);
+  requestRender(); // resized pixels need one fresh render
   if(focused){
     const m = focused==="crt" ? crt.display :
               focused==="laptop" ? lap.display : tvd.innerScreen;

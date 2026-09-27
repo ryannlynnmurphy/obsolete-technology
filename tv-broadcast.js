@@ -345,7 +345,7 @@ export function createTVBroadcast({ canvas, context, texture, screenMaterial, dr
   }
 
   function update(now) {
-    if (!powered || now - lastFrame < 40) return;
+    if (!powered || now - lastFrame < 40) return false;
     lastFrame = now;
     applyAudio();
     if (activeProgram !== null && state === 'playing' && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
@@ -385,6 +385,7 @@ export function createTVBroadcast({ canvas, context, texture, screenMaterial, dr
     if (now < transitionUntil) drawReceptionNoise(.85);
     if (now < burstUntil) drawGlitch(now);
     texture.needsUpdate = true;
+    return true;
   }
 
   const onVisibility = () => {
