@@ -29,6 +29,8 @@
     font-family:"IBM Plex Mono",monospace;
   }
   #contact-screen.visible{opacity:1;pointer-events:auto}
+  /* Autoplay mode: game owns input, mouse cursor hidden. */
+  #contact-screen.no-mouse, #contact-screen.no-mouse *{cursor:none !important}
   .contact-content{display:flex;flex-direction:column;align-items:center;gap:clamp(10px,1.6vh,18px);width:100%;max-height:100%;padding:12px;box-sizing:border-box;transform:translateY(-1vh)}
   .contact-title{
     position:relative;margin:0;font-size:clamp(18px,2vw,30px);font-weight:500;
@@ -185,7 +187,7 @@ renderer.setPixelRatio(renderPixelRatio());
 renderer.setSize(innerWidth, innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.55;
+renderer.toneMappingExposure = 0.35;
 document.body.appendChild(renderer.domElement);
 /* A lost GPU context cannot rebuild itself reliably — say so and offer reload. */
 renderer.domElement.addEventListener("webglcontextlost", (e)=>{
@@ -196,14 +198,14 @@ renderer.domElement.addEventListener("webglcontextlost", (e)=>{
 
 const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-scene.environmentIntensity = 0.16; // broad reflections describe the solid metal
+scene.environmentIntensity = 0.08; // broad reflections describe the solid metal
 
 // Near-black void lighting — the craft carries its own emission
-scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x0a0c10, 0.09));
-const key = new THREE.DirectionalLight(0xffffff, 0.6);
+scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x0a0c10, 0.05));
+const key = new THREE.DirectionalLight(0xffffff, 0.35);
 key.position.set(4, 7, 5);
 scene.add(key);
-const rim = new THREE.DirectionalLight(0x9db8ff, 0.45);
+const rim = new THREE.DirectionalLight(0x9db8ff, 0.25);
 rim.position.set(-5, 3.5, -6);
 scene.add(rim);
 
@@ -216,7 +218,7 @@ controls.update();
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 const bloom = new UnrealBloomPass(
-  new THREE.Vector2(innerWidth, innerHeight), 0.25, 0.34, 0.92
+  new THREE.Vector2(innerWidth, innerHeight), 0.18, 0.34, 0.92
 );
 composer.addPass(bloom);
 
@@ -237,7 +239,7 @@ const beam = buildAtmosphericBeam();
 beamAnchor.add(beam.group);
 
 // A soft local light sells the idea that the haze is illuminated from the craft.
-const beamLight = new THREE.SpotLight(0xffe4bd, 3.2, 13.0, Math.PI * 0.24, 0.96, 1.75);
+const beamLight = new THREE.SpotLight(0xffe4bd, 1.9, 13.0, Math.PI * 0.24, 0.96, 1.75);
 beamLight.position.set(0, -3.9, 0.2);
 const beamTarget = new THREE.Object3D();
 beamTarget.position.set(0, -12.0, 0.2);
@@ -356,6 +358,7 @@ function startShot(){
   contactScreenCoversScene = false; // replay restarts the loop
   contactShown = false;
   contactScreen.classList.remove("visible");
+  contactScreen.classList.remove("no-mouse");
   contactTitle.classList.remove("resolve");
   contactAuthor.classList.remove("visible");
   contactEmail.classList.remove("visible");
@@ -377,6 +380,22 @@ const contactAuthor = contactScreen.querySelector(".contact-author");
 const contactEmail = contactScreen.querySelector(".contact-email");
 const contactGame = document.getElementById("signal-games");
 let contactShown = false;
+function focusSignalGame(){
+  try{ contactGame.focus({ preventScroll: true }); }catch(_){ try{ contactGame.focus(); }catch(_2){} }
+  try{ if(contactGame.contentWindow) contactGame.contentWindow.focus(); }catch(_){}
+  /* Same-origin: hide the cursor inside the game frame too. */
+  try{
+    const doc = contactGame.contentDocument;
+    if(doc){
+      doc.body.style.cursor = "none";
+      const cv = doc.getElementById("game");
+      if(cv) cv.style.cursor = "none";
+    }
+  }catch(_){}
+}
+contactGame.addEventListener("load", ()=>{
+  if(contactShown && contactGame.classList.contains("visible")) focusSignalGame();
+});
 function showContactScreen(){
   if(contactShown) return;
   contactShown = true;
@@ -397,7 +416,12 @@ function showContactScreen(){
   setTimeout(() => { contactTitle.classList.add("resolve"); }, 1800);
   setTimeout(() => { contactAuthor.classList.add("visible"); }, 2600);
   setTimeout(() => { contactEmail.classList.add("visible"); }, 3300);
-  setTimeout(() => { contactGame.classList.add("visible"); }, 3900);
+  setTimeout(() => {
+    contactGame.classList.add("visible");
+    /* Autoplay: user is immediately playing, mouse cursor hidden. */
+    contactScreen.classList.add("no-mouse");
+    focusSignalGame();
+  }, 3900);
 }
 
 /* Chapter mode (embedded in the story controller) waits for the parent's
@@ -431,7 +455,7 @@ function renderUfo() {
   const shutdown = smoothstep01((st - T_ARRIVE) / (T_BEAM_OFF - T_ARRIVE));
   const beamPower = 1.0 - shutdown;
   setBeamPower(beam, beamPower, t);
-  beamLight.intensity = 0.8 * Math.pow(beamPower, 1.55);
+  beamLight.intensity = 0.5 * Math.pow(beamPower, 1.55);
   if (st >= T_BEAM_OFF + 0.4) beam.group.visible = false;
 
   /* ----- rig: approach, then pinned at center ----- */
@@ -492,27 +516,27 @@ function renderUfo() {
   // Emitter + machine lights carry the same departure math the old engine
   // channel had: beam-coupled base, cue compression, perspective falloff,
   // and a whisper of a pulse at the instant of motion.
-  const emitterBase = EMITTER_BASE_OPACITY * 0.6 + glowBreath * 0.02;
+  const emitterBase = EMITTER_BASE_OPACITY * 0.5 + glowBreath * 0.02;
   emitterMat.opacity = Math.min(1, Math.max(
     0.02,
     emitterBase *
     (0.72 + beamPower * 0.16) *
     compressionDim * perspectiveDim * pulseBoost
   ));
-  warmCore.intensity = WARM_CORE_BASE * 0.28 *
+  warmCore.intensity = WARM_CORE_BASE * 0.22 *
     (0.70 + beamPower * 0.14) *
     compressionDim * perspectiveDim * pulseBoost;
-  warmBounce.intensity = WARM_BOUNCE_BASE * 0.28 *
+  warmBounce.intensity = WARM_BOUNCE_BASE * 0.22 *
     (0.70 + beamPower * 0.14) *
     compressionDim * perspectiveDim * pulseBoost;
   warmSide.intensity = Math.max(
-    0.15,
-    WARM_SIDE_BASE * 0.28 *
+    0.12,
+    WARM_SIDE_BASE * 0.22 *
     (1.0 - compression * 0.10) * perspectiveDim
   );
 
   // Post stays quiet — a minuscule bloom lift, then gone with the craft.
-  bloom.strength = 0.25 + 0.055 * departurePulse;
+  bloom.strength = 0.18 + 0.04 * departurePulse;
 
   /* ----- residual: barely-there contraction, then black ----- */
   if (st >= LAUNCH_START + 0.03 && st <= T_RESIDUAL_END) {
