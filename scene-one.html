@@ -26,8 +26,57 @@
   "@dimforge/rapier3d-compat":"https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.14.0/rapier.es.js"
 }}
 </script>
+<style>
+  #scene-status{position:fixed;inset:0;display:grid;place-content:center;gap:12px;
+    background:#060708;color:rgba(245,245,238,.85);z-index:60;text-align:center;
+    font:13px/1.6 system-ui,sans-serif;padding:24px}
+  #scene-status.failed button{background:#e8edf3;color:#0b0e13;border:0;border-radius:999px;
+    padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+</style>
 </head>
 <body>
+<div id="scene-status" role="status">Loading the signal…</div>
+<script>
+/* Boot watchdog: classic script, runs before any module import so a
+   failed CDN import cannot silence it. Never tears down the scene —
+   a late boot clears even the failure UI. Test hook: ?watchdogMs=. */
+(function(){
+  var status = document.getElementById("scene-status");
+  var booted = false;
+  var params = new URLSearchParams(location.search);
+  var TIMEOUT = Number(params.get("watchdogMs")) || 25000;
+  function showFail(msg){
+    if(!document.getElementById("scene-status")){
+      document.body.appendChild(status);
+    }
+    status.innerHTML = "";
+    var p = document.createElement("p"); p.textContent = msg;
+    var b = document.createElement("button"); b.textContent = "Retry";
+    b.onclick = function(){ location.reload(); };
+    status.appendChild(p); status.appendChild(b);
+  }
+  window.__sceneWatchdog = {
+    ok: function(){
+      booted = true; clearTimeout(timer);
+      if(status.parentNode) status.remove();
+    },
+    fail: function(msg){ showFail(msg); }
+  };
+  try{
+    var c = document.createElement("canvas");
+    if(!c.getContext("webgl2") && !c.getContext("webgl")){
+      showFail("This scene needs WebGL, which this browser has disabled. Try reloading or use a browser with WebGL enabled.");
+      return;
+    }
+  }catch(e){
+    showFail("This scene needs WebGL, which is unavailable here. Try reloading or use a browser with WebGL enabled.");
+    return;
+  }
+  var timer = setTimeout(function(){
+    if(!booted) showFail("This scene couldn\u2019t start here. Try reloading or use a browser with WebGL enabled.");
+  }, TIMEOUT);
+})();
+</script>
 <div id="title">obsolete technology</div>
 <button id="exitBtn">exit screen &middot; esc</button>
 
@@ -75,6 +124,12 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.1;
 document.body.appendChild(renderer.domElement);
+/* A lost GPU context cannot rebuild itself reliably — say so and offer reload. */
+renderer.domElement.addEventListener("webglcontextlost", (e)=>{
+  e.preventDefault();
+  try{ window.__sceneWatchdog && window.__sceneWatchdog.fail(
+    "The graphics context was lost. Reload to restore the signal."); }catch(_){}
+});
 
 /* DOM overlay layer: hosts the solitaire game as a live page mapped
    onto the CRT screen. Click-through everywhere except the game. */
@@ -1780,6 +1835,7 @@ if(new URLSearchParams(location.search).has("orbit360")){
   }, 250);
   setTimeout(() => clearInterval(t0), 60000);
 }
+try{ window.__sceneWatchdog && window.__sceneWatchdog.ok(); }catch(_){}
 requestRender();
 
 addEventListener("resize", ()=>{

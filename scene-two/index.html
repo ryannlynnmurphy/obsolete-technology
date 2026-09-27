@@ -70,6 +70,11 @@
     48%{opacity:.07;transform:translateX(2px)}100%{opacity:0}
   }
   @keyframes subtleFlicker{0%,96%,100%{opacity:1}97%{opacity:.93}98%{opacity:1}}
+  #scene-status{position:fixed;inset:0;display:grid;place-content:center;gap:12px;
+    background:#060708;color:rgba(245,245,238,.85);z-index:60;text-align:center;
+    font:13px/1.6 system-ui,sans-serif;padding:24px}
+  #scene-status.failed button{background:#e8edf3;color:#0b0e13;border:0;border-radius:999px;
+    padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
 </style>
 <script type="importmap">
 {"imports":{
@@ -79,6 +84,48 @@
 </script>
 </head>
 <body>
+<div id="scene-status" role="status">Loading the signal…</div>
+<script>
+/* Boot watchdog: classic script, runs before any module import so a
+   failed CDN import cannot silence it. Never tears down the scene —
+   a late boot clears even the failure UI. Test hook: ?watchdogMs=. */
+(function(){
+  var status = document.getElementById("scene-status");
+  var booted = false;
+  var params = new URLSearchParams(location.search);
+  var TIMEOUT = Number(params.get("watchdogMs")) || 25000;
+  function showFail(msg){
+    if(!document.getElementById("scene-status")){
+      document.body.appendChild(status);
+    }
+    status.innerHTML = "";
+    var p = document.createElement("p"); p.textContent = msg;
+    var b = document.createElement("button"); b.textContent = "Retry";
+    b.onclick = function(){ location.reload(); };
+    status.appendChild(p); status.appendChild(b);
+  }
+  window.__sceneWatchdog = {
+    ok: function(){
+      booted = true; clearTimeout(timer);
+      if(status.parentNode) status.remove();
+    },
+    fail: function(msg){ showFail(msg); }
+  };
+  try{
+    var c = document.createElement("canvas");
+    if(!c.getContext("webgl2") && !c.getContext("webgl")){
+      showFail("This scene needs WebGL, which this browser has disabled. Try reloading or use a browser with WebGL enabled.");
+      return;
+    }
+  }catch(e){
+    showFail("This scene needs WebGL, which is unavailable here. Try reloading or use a browser with WebGL enabled.");
+    return;
+  }
+  var timer = setTimeout(function(){
+    if(!booted) showFail("This scene couldn\u2019t start here. Try reloading or use a browser with WebGL enabled.");
+  }, TIMEOUT);
+})();
+</script>
 <div id="hud">scene 2 &middot; ufo flyby &middot; <span id="status">loading</span></div>
 <button id="replay">replay flyby</button>
 <div id="contact-screen">
@@ -140,6 +187,12 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.55;
 document.body.appendChild(renderer.domElement);
+/* A lost GPU context cannot rebuild itself reliably — say so and offer reload. */
+renderer.domElement.addEventListener("webglcontextlost", (e)=>{
+  e.preventDefault();
+  try{ window.__sceneWatchdog && window.__sceneWatchdog.fail(
+    "The graphics context was lost. Reload to restore the signal."); }catch(_){}
+});
 
 const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
@@ -513,6 +566,7 @@ function renderUfo() {
   scheduleUfo();
 }
 window.__ufo = { stats: ufoStats, get covered(){ return contactScreenCoversScene; } };
+try{ window.__sceneWatchdog && window.__sceneWatchdog.ok(); }catch(_){}
 scheduleUfo();
 
 addEventListener("resize", () => {

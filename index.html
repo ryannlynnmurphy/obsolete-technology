@@ -14,9 +14,15 @@
   #cut{position:fixed;inset:0;background:#000;opacity:0;pointer-events:none;
     transition:opacity 1.2s ease;z-index:20}
   #cut.black{opacity:1}
+  #scene-status{position:fixed;inset:0;display:grid;place-content:center;gap:12px;
+    background:#000;color:rgba(245,245,238,.85);z-index:40;text-align:center;
+    font:13px/1.6 system-ui,sans-serif;padding:24px}
+  #scene-status button{background:#e8edf3;color:#0b0e13;border:0;border-radius:999px;
+    padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
 </style>
 </head>
 <body>
+<div id="scene-status" role="status">Loading the signal…</div>
 <div id="cut"></div>
 <script>
 /* ============================================================
@@ -54,6 +60,25 @@ let sceneOneComplete = false;
 let activeScene = null; // the chapter iframe currently on screen
 const cut = document.getElementById("cut");
 
+/* Chapter watchdog: clears when Scene 1 boots (iframe load); offers
+   retry on timeout without ever blocking a late boot. */
+const sceneStatus = document.getElementById("scene-status");
+const WATCHDOG_MS = Number(new URLSearchParams(location.search).get("watchdogMs")) || 25000;
+const watchdogTimer = setTimeout(() => {
+  if(!sceneStatus.parentNode) return;
+  sceneStatus.innerHTML = "";
+  const p = document.createElement("p");
+  p.textContent = "This story couldn\u2019t start here. Try reloading or use a browser with WebGL enabled.";
+  const b = document.createElement("button");
+  b.textContent = "Retry";
+  b.onclick = () => location.reload();
+  sceneStatus.append(p, b);
+}, WATCHDOG_MS);
+function sceneBooted(){
+  clearTimeout(watchdogTimer);
+  if(sceneStatus.parentNode) sceneStatus.remove();
+}
+
 function makeStage(src){
   const frame = document.createElement("iframe");
   frame.className = "stage";
@@ -65,6 +90,7 @@ function makeStage(src){
 
 function loadSceneOne(){
   activeScene = makeStage("scene-one.html");
+  activeScene.addEventListener("load", sceneBooted, { once: true });
 }
 
 function destroySceneOne(frame){
