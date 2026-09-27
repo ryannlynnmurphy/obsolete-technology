@@ -283,6 +283,26 @@
     font-weight: 400;
   }
 
+  /* Keep the contact story readable without shaking, tearing, or flashing
+     the laptop's screen. The transmission text still progresses normally. */
+  .flicker, .takeover,
+  body.signal-static #screen, body.signal-static #terminal,
+  body.signal-static #screen::after {
+    animation: none !important;
+    transform: none !important;
+    filter: none !important;
+  }
+  body.signal-static #terminal {
+    width: min(980px, 100%);
+    max-width: 980px;
+    font-size: clamp(13px, 1.25vw, 17px);
+    line-height: 1.45;
+    letter-spacing: .02em;
+    text-shadow: 0 0 7px rgba(210,230,214,.12);
+  }
+  body.signal-static #screen::before { display: none; }
+  body.signal-static #screen::after { opacity: .12; }
+
   @media (max-width: 700px) {
     #screen { padding: 18px; }
     #terminal { font-size: 13px; }

@@ -167,7 +167,7 @@ function buildCRT(){
 }
 
 /* ============================================================
-   DEVICE 2 — LAPTOP (geometry / keyboard / Ryann OS preserved)
+   DEVICE 2 — LAPTOP (geometry / keyboard / field terminal)
    ============================================================ */
 function buildLaptop(){
   const laptop = new THREE.Group();
@@ -178,132 +178,6 @@ function buildLaptop(){
   const darkAlu = new THREE.MeshStandardMaterial({color:0x303236,metalness:.7,roughness:.32});
   const blackMat = new THREE.MeshStandardMaterial({color:0x090909,roughness:.32,metalness:.15});
   const keyMatBase = new THREE.MeshStandardMaterial({color:0x191919,roughness:.55});
-
-  const OS_W=1024, OS_H=560;
-  const osCanvas=document.createElement("canvas");
-  osCanvas.width=OS_W; osCanvas.height=OS_H;
-  const ctx=osCanvas.getContext("2d");
-  const osTex=new THREE.CanvasTexture(osCanvas);
-  osTex.colorSpace=THREE.SRGBColorSpace;
-  osTex.anisotropy=8;
-
-  const ICON={x:70,y:70,w:100,h:122};
-  let WIN={x:142,y:48,w:740,h:464};
-  const TITLE_H=40;
-  let selected=false, windowOpen=false;
-  let cursor={x:512,y:300}, cursorActive=false;
-  let pdfScroll=0, typedBuffer="", typedUntil=0;
-  let lastVirtualClick=0;
-
-  function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);
-    ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);
-    ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
-
-  function drawOS(){
-    const now=performance.now();
-    /* unbranded dark workstation: deep indigo field, near-black top bar */
-    const g=ctx.createLinearGradient(0,0,OS_W,OS_H);
-    g.addColorStop(0,"#232b45");g.addColorStop(.55,"#161b2e");g.addColorStop(1,"#0b0e18");
-    ctx.fillStyle=g;ctx.fillRect(0,0,OS_W,OS_H);
-    /* faint terminal-grid texture */
-    ctx.fillStyle="rgba(120,160,255,.045)";
-    for(let gx=0;gx<OS_W;gx+=32)ctx.fillRect(gx,32,1,OS_H-32);
-    for(let gy=32;gy<OS_H;gy+=32)ctx.fillRect(0,gy,OS_W,1);
-    ctx.fillStyle="#0a0c11";ctx.fillRect(0,0,OS_W,32);
-    ctx.fillStyle="#e8eaf0";ctx.font="600 14px system-ui";ctx.textBaseline="middle";
-    ctx.fillText("ryann",14,17);
-    ctx.fillStyle="#8b93a7";ctx.font="14px system-ui";
-    ctx.fillText("desktop",72,17);
-    ctx.textAlign="right";
-    ctx.fillStyle="#c9cfdd";
-    ctx.fillText(new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})+"   100%",OS_W-14,17);
-    ctx.textAlign="left";
-    const ix=ICON.x,iy=ICON.y;
-    if(selected){ctx.fillStyle="rgba(90,140,255,.35)";rr(ix-10,iy-8,ICON.w+20,ICON.h+22,12);ctx.fill();}
-    ctx.fillStyle="#dfe3ec";ctx.strokeStyle="rgba(0,0,0,.5)";
-    ctx.beginPath();ctx.moveTo(ix+10,iy);ctx.lineTo(ix+70,iy);ctx.lineTo(ix+86,iy+16);
-    ctx.lineTo(ix+86,iy+84);ctx.lineTo(ix+10,iy+84);ctx.closePath();ctx.fill();ctx.stroke();
-    ctx.fillStyle="#b02a37";ctx.fillRect(ix+10,iy+52,76,22);
-    ctx.fillStyle="#fff";ctx.font="bold 13px system-ui";ctx.fillText("PDF",ix+32,iy+64);
-    ctx.fillStyle="#e8eaf0";ctx.font="13px system-ui";ctx.textAlign="center";
-    ctx.fillText("rx.pdf",ix+48,iy+102);ctx.textAlign="left";
-    if(typedBuffer && now<typedUntil){
-      ctx.fillStyle="rgba(5,8,12,.92)";rr(OS_W/2-180,OS_H-52,360,34,17);ctx.fill();
-      ctx.strokeStyle="rgba(74,222,128,.4)";rr(OS_W/2-180,OS_H-52,360,34,17);ctx.stroke();
-      ctx.fillStyle="#4ade80";ctx.font="15px ui-monospace,monospace";ctx.textAlign="center";
-      ctx.fillText("$ "+typedBuffer.slice(-28)+"_",OS_W/2,OS_H-34);ctx.textAlign="left";
-    }
-    if(windowOpen){
-      ctx.save();ctx.shadowColor="rgba(0,0,0,.6)";ctx.shadowBlur=30;ctx.shadowOffsetY=10;
-      ctx.fillStyle="#161a23";rr(WIN.x,WIN.y,WIN.w,WIN.h,12);ctx.fill();ctx.restore();
-      ctx.save();rr(WIN.x,WIN.y,WIN.w,WIN.h,12);ctx.clip();
-      ctx.fillStyle="#232936";ctx.fillRect(WIN.x,WIN.y,WIN.w,TITLE_H);
-      ctx.strokeStyle="#3a4152";ctx.beginPath();
-      ctx.moveTo(WIN.x,WIN.y+TITLE_H+.5);ctx.lineTo(WIN.x+WIN.w,WIN.y+TITLE_H+.5);ctx.stroke();
-      ctx.fillStyle="#e0605e";ctx.beginPath();ctx.arc(WIN.x+26,WIN.y+20,10,0,7);ctx.fill();
-      ctx.fillStyle="#1a0d0d";ctx.font="bold 12px system-ui";ctx.textAlign="center";
-      ctx.fillText("x",WIN.x+26,WIN.y+21);ctx.textAlign="left";
-      ctx.fillStyle="#3a4152";ctx.beginPath();ctx.arc(WIN.x+48,WIN.y+20,8,0,7);ctx.fill();
-      ctx.beginPath();ctx.arc(WIN.x+66,WIN.y+20,8,0,7);ctx.fill();
-      ctx.fillStyle="#aab2c5";ctx.font="13px ui-monospace,monospace";ctx.textAlign="center";
-      ctx.fillText("rx@dev: ~/rx.pdf",WIN.x+WIN.w/2,WIN.y+21);ctx.textAlign="left";
-      const cy=WIN.y+TITLE_H;
-      ctx.fillStyle="#0d1017";ctx.fillRect(WIN.x,cy,WIN.w,WIN.h-TITLE_H);
-      ctx.save();ctx.beginPath();ctx.rect(WIN.x,cy,WIN.w,WIN.h-TITLE_H);ctx.clip();
-      ctx.translate(0,-pdfScroll);
-      const px=WIN.x+70, pw=WIN.w-140;
-      ctx.font="14px ui-monospace,monospace";
-      for(let p=0;p<2;p++){
-        const py=cy+24+p*330;
-        if(p===0){
-          ctx.fillStyle="#7dd3fc";
-          ctx.fillText("rx@dev:~$ cat rx.pdf",px,py+30);
-          ctx.fillStyle="#d4d4d4";
-          ctx.fillText("This file is intentionally quiet.",px,py+72);
-          ctx.fillText("There is nothing else on this computer.",px,py+98);
-          ctx.fillStyle="#2c3342";
-          for(let i=0;i<4;i++)ctx.fillRect(px,py+127+i*22,pw-(i*40),10);
-          ctx.fillStyle="#5b6478";
-          ctx.fillText("rx@dev:~$ _",px,py+252);
-        }else{
-          ctx.fillStyle="#2c3342";
-          for(let i=0;i<6;i++)ctx.fillRect(px,py+50+i*22,pw-(i*30),10);
-          ctx.fillStyle="#5b6478";
-          ctx.fillText("— end of file —",px,py+230);
-        }
-      }
-      ctx.restore();ctx.restore();
-    }
-    if(cursorActive){
-      ctx.fillStyle="#fff";ctx.strokeStyle="#000";ctx.lineWidth=2;
-      ctx.beginPath();ctx.moveTo(cursor.x,cursor.y);ctx.lineTo(cursor.x,cursor.y+20);
-      ctx.lineTo(cursor.x+6,cursor.y+15);ctx.lineTo(cursor.x+9,cursor.y+21);
-      ctx.lineTo(cursor.x+12,cursor.y+19);ctx.lineTo(cursor.x+9,cursor.y+13);
-      ctx.lineTo(cursor.x+15,cursor.y+13);ctx.closePath();ctx.fill();ctx.stroke();
-    }
-    osTex.needsUpdate=true;
-  }
-
-  const inIcon=(x,y)=>x>ICON.x-12&&x<ICON.x+ICON.w+12&&y>ICON.y-10&&y<ICON.y+ICON.h+14;
-  const inClose=(x,y)=>Math.hypot(x-(WIN.x+26),y-(WIN.y+20))<14;
-  const inTitle=(x,y)=>x>WIN.x&&x<WIN.x+WIN.w&&y>WIN.y&&y<WIN.y+TITLE_H;
-  let winDragging=false, winGrabDX=0, winGrabDY=0;
-  function handleVirtualClick(cx,cy){
-    if(windowOpen){
-      if(inClose(cx,cy)){windowOpen=false;winDragging=false;}
-      return;
-    }
-    if(inIcon(cx,cy)){
-      const now=performance.now();
-      if(now-lastVirtualClick<380){windowOpen=true;selected=true;pdfScroll=0;}
-      else selected=true;
-      lastVirtualClick=now;
-    }else selected=false;
-  }
-  function typeKey(ch){
-    if(ch==='back'){typedBuffer=typedBuffer.slice(0,-1);typedUntil=performance.now()+2000;return;}
-    if(typeof ch==='string'&&ch.length===1){typedBuffer=(typedBuffer+ch).slice(-40);typedUntil=performance.now()+2000;}
-  }
 
   /* ---- laptop hardware ---- */
   const base=new THREE.Mesh(new THREE.BoxGeometry(6.4,.22,4.2),aluminum);
@@ -412,7 +286,7 @@ function buildLaptop(){
   const bezel=new THREE.Mesh(new THREE.BoxGeometry(6.13,3.52,.04),blackMat);
   bezel.position.set(0,1.88,.101);pivot.add(bezel);
   const display=new THREE.Mesh(new THREE.PlaneGeometry(5.75,3.15),
-    new THREE.MeshBasicMaterial({map:osTex,toneMapped:false}));
+    new THREE.MeshBasicMaterial({color:0x070908,toneMapped:false}));
   display.position.set(0,1.88,.124);pivot.add(display);
   const lens=new THREE.Mesh(new THREE.SphereGeometry(.035,16,16),
     new THREE.MeshStandardMaterial({color:0x101820,roughness:.1}));
@@ -429,17 +303,8 @@ function buildLaptop(){
       m.position.y+=(target-m.position.y)*.4;
     }
   }
-  return {group:laptop, display, OS_W, OS_H, drawOS, updateKeys, flashKey,
-    handleVirtualClick, typeKey, keyByCode, inClose, inTitle,
-    screenW:5.75, screenH:3.15,
-    get cursor(){return cursor;}, set cursor(c){cursor=c;},
-    get cursorActive(){return cursorActive;}, set cursorActive(v){cursorActive=v;},
-    get windowOpen(){return windowOpen;},
-    get winDragging(){return winDragging;}, set winDragging(v){winDragging=v;},
-    get WIN(){return WIN;}, setWIN(x,y){WIN.x=x;WIN.y=y;},
-    get winGrab(){return {dx:winGrabDX,dy:winGrabDY};},
-    setWinGrab(dx,dy){winGrabDX=dx;winGrabDY=dy;},
-    scrollPdf(d){pdfScroll=THREE.MathUtils.clamp(pdfScroll+d,0,220);}};
+  return {group:laptop, display, updateKeys, flashKey, keyByCode,
+    screenW:5.75, screenH:3.15};
 }
 
 /* ============================================================
@@ -856,6 +721,59 @@ laptopObj.scale.set(5.75/LAPTOP_OS_W, 3.15/LAPTOP_OS_H, 1);
 laptopObj.position.set(0, 0, 0.006);
 laptopObj.visible = false;
 lap.display.add(laptopObj);
+const laptopMaskCanvas = document.createElement("canvas");
+laptopMaskCanvas.width = LAPTOP_OS_W;
+laptopMaskCanvas.height = LAPTOP_OS_H;
+const laptopMask = laptopMaskCanvas.getContext("2d");
+const LAPTOP_MASK_COLS = 32, LAPTOP_MASK_ROWS = 18;
+function laptopScreenVisibleAt(u, v){
+  _sv4.set((u - 0.5) * lap.screenW, (0.5 - v) * lap.screenH, 0);
+  lap.display.localToWorld(_sv4);
+  _sv3.copy(_sv4).sub(camera.position);
+  const sampleDist = _sv3.length();
+  _ray.set(camera.position, _sv3.normalize());
+  _ray.far = sampleDist + 0.01;
+  const hits = _ray.intersectObjects([tvFlight, lapFlight, crtFlight], true);
+  return hits.length > 0 && hits[0].object === lap.display;
+}
+function updateLaptopScreenMask(){
+  /* CSS3D renders above WebGL. Mask only the screen pixels whose first
+     3D hit is the laptop display, so other devices can cover the live
+     terminal without revealing another desktop underneath. */
+  let fullyClear = true;
+  for(const u of [0.02, 0.26, 0.5, 0.74, 0.98]){
+    for(const v of [0.02, 0.26, 0.5, 0.74, 0.98]){
+      if(!laptopScreenVisibleAt(u, v)){ fullyClear = false; break; }
+    }
+    if(!fullyClear) break;
+  }
+  if(fullyClear){
+    laptopBlocked = false;
+    laptopDiv.style.maskImage = "none";
+    laptopDiv.style.webkitMaskImage = "none";
+  }else{
+    laptopMask.clearRect(0, 0, LAPTOP_OS_W, LAPTOP_OS_H);
+    laptopMask.fillStyle = "#fff";
+    let visibleCells = 0;
+    for(let row = 0; row < LAPTOP_MASK_ROWS; row++){
+      for(let col = 0; col < LAPTOP_MASK_COLS; col++){
+        if(!laptopScreenVisibleAt((col + 0.5) / LAPTOP_MASK_COLS,
+                                  (row + 0.5) / LAPTOP_MASK_ROWS)) continue;
+        const x0 = Math.floor(col * LAPTOP_OS_W / LAPTOP_MASK_COLS);
+        const x1 = Math.ceil((col + 1) * LAPTOP_OS_W / LAPTOP_MASK_COLS);
+        const y0 = Math.floor(row * LAPTOP_OS_H / LAPTOP_MASK_ROWS);
+        const y1 = Math.ceil((row + 1) * LAPTOP_OS_H / LAPTOP_MASK_ROWS);
+        laptopMask.fillRect(x0, y0, x1 - x0, y1 - y0);
+        visibleCells++;
+      }
+    }
+    laptopBlocked = visibleCells === 0;
+    const mask = `url("${laptopMaskCanvas.toDataURL("image/png")}")`;
+    laptopDiv.style.maskImage = mask;
+    laptopDiv.style.webkitMaskImage = mask;
+  }
+  _ray.far = Infinity;
+}
 
 /* Collider quats in flight space (account for inner offsets:
    laptop base yaw -18°, lid = yaw(-18°) * tilt(-12°)). */
@@ -1267,7 +1185,6 @@ function enterFocus(name){
     if(!crt.S.power){ crt.togglePower(); }
     computer.enterComputerMode(); }
   if(name==="laptop"){ mesh=lap.display; w=lap.screenW*LAP_S; h=lap.screenH*LAP_S;
-    lap.cursorActive = false; lap.winDragging = false;
     laptopComputer.enterComputerMode(); }
   if(name==="tv"){ mesh=tvd.innerScreen; w=5.9*TV_S; h=2.8*TV_S;
     if(!tvd.powered) setTVControl("vhf",2);
@@ -1290,7 +1207,6 @@ function exitFocus(){
   falling.setFrozen("crt", false);
   falling.setFrozen("laptop", false);
   falling.setFrozen("tv", false);
-  if(focused==="laptop"){ lap.cursorActive = false; lap.winDragging = false; }
   const wasLaptop = focused === "laptop";
   if(focused === "tv") tvKeyboard.hide();
   focused = null;
@@ -1339,7 +1255,6 @@ addEventListener("message", (e)=>{
 addEventListener("keydown", (e)=>{
   if(e.key === "Escape"){
     if(focused){ exitFocus(); return; }
-    if(lap.winDragging) lap.winDragging = false;
     return;
   }
   /* DEBUG: Space (outside any machine) tests the release without
@@ -1459,7 +1374,6 @@ renderer.domElement.addEventListener("pointerup", (e)=>{
     }else if(focused === "tv"){
       tvBroadcast.engage();
     }
-    lap.winDragging = false;
     return;
   }
   if(wasOrbiting){ downInfo = null; syncOrbitFromCamera(); return; }
@@ -1475,7 +1389,6 @@ renderer.domElement.addEventListener("pointercancel", (e)=>{
   controlDrag=null;
   downInfo = null;
   orbitDrag = null;
-  lap.winDragging = false;
 });
 renderer.domElement.addEventListener("pointerleave", ()=>{
   if(controlDrag)return;
@@ -1492,10 +1405,6 @@ renderer.domElement.addEventListener("wheel", (e)=>{
       if(focused==="tv")tvKeyboard.focus(control);
       e.preventDefault(); e.stopPropagation(); return;
     }
-  }
-  if(focused === "laptop" && lap.windowOpen){
-    lap.scrollPdf(e.deltaY*.6);
-    e.preventDefault();
   }
 }, {passive:false});
 
@@ -1553,11 +1462,10 @@ window.__sculpture = {
 const clock = new THREE.Clock();
 let hidden = false;
 let staticAcc = 0;
-let uiTick = 0;
 let hoverTick = 0;
 let occlTick = 0;
 let screenBlocked = false;
-let laptopBlocked = false;
+let laptopBlocked = true;
 document.addEventListener("visibilitychange", ()=>{ hidden = document.hidden; });
 
 /* Frame the sculpture on load: pull the orbit rig onto the composed
@@ -1653,13 +1561,7 @@ function animate(){
   }
   camera.lookAt(_tgt);
 
-  /* screens stay alive.
-     Canvas redraws run at half rate — the texture uploads are the
-     most expensive per-frame work here, and 30Hz is invisible. */
-  uiTick++;
-  if(uiTick % 2 === 0){
-    lap.drawOS();
-  }
+  /* Keep the physical keys and the other live screens updated. */
   lap.updateKeys();
   tvBroadcast.update(performance.now());
   if(softieGlitchUntil > 0) updateSoftieGlitch(performance.now());
@@ -1693,37 +1595,14 @@ function animate(){
   gameDiv.style.pointerEvents = (!crtTransmission.active && focused === "crt") ? "auto" : "none";
   if(!crtTransmission.active) crt.display.visible = false;
 
-  /* Laptop field terminal: same contract — hide when facing away or
-     occluded so the page never floats over the back/side of the lid.
-     The canvas OS stays as dark backing behind the opaque iframe. */
+  /* Laptop field terminal follows the visible part of its physical screen. */
   lap.display.getWorldPosition(_sv1);
   lap.display.getWorldQuaternion(_sq1);
   _sv2.set(0, 0, 1).applyQuaternion(_sq1);
   _sv3.copy(camera.position).sub(_sv1).normalize();
   const laptopFacing = _sv2.dot(_sv3);
   if(laptopFacing > 0.12 && occlTick % 6 === 0){
-    /* CSS3D has no depth buffer. A clear center ray can leave the whole
-       iframe painted across a chassis that covers the screen's edge.
-       Hide the iframe if any sampled part is covered; the WebGL screen
-       underneath remains correctly depth-tested. */
-    laptopBlocked = false;
-    for(const x of [-0.75, 0, 0.75]){
-      for(const y of [-0.75, 0, 0.75]){
-        _sv4.set(x * lap.screenW / 2, y * lap.screenH / 2, 0);
-        lap.display.localToWorld(_sv4);
-        _sv3.copy(_sv4).sub(camera.position);
-        const sampleDist = _sv3.length();
-        _ray.set(camera.position, _sv3.normalize());
-        _ray.far = sampleDist + 0.01;
-        const lapHits = _ray.intersectObjects([tvFlight, lapFlight, crtFlight], true);
-        if(!lapHits.length || lapHits[0].object !== lap.display){
-          laptopBlocked = true;
-          break;
-        }
-      }
-      if(laptopBlocked) break;
-    }
-    _ray.far = Infinity;
+    updateLaptopScreenMask();
   }
   laptopObj.visible = laptopFacing > 0.12 && !laptopBlocked;
   laptopDiv.style.pointerEvents = (focused === "laptop") ? "auto" : "none";
