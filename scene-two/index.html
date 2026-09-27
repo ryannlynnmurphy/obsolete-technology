@@ -137,14 +137,14 @@ document.body.appendChild(renderer.domElement);
 
 const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-scene.environmentIntensity = 0.04; // hull barely catches the void
+scene.environmentIntensity = 0.16; // broad reflections describe the solid metal
 
 // Near-black void lighting — the craft carries its own emission
-scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x0a0c10, 0.06));
-const key = new THREE.DirectionalLight(0xffffff, 0.18);
+scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x0a0c10, 0.09));
+const key = new THREE.DirectionalLight(0xffffff, 0.6);
 key.position.set(4, 7, 5);
 scene.add(key);
-const rim = new THREE.DirectionalLight(0x9db8ff, 0.15);
+const rim = new THREE.DirectionalLight(0x9db8ff, 0.45);
 rim.position.set(-5, 3.5, -6);
 scene.add(rim);
 

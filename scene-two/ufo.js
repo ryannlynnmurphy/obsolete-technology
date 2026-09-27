@@ -84,9 +84,11 @@ function makeIndustrialMaps(seed = 19, size = 512) {
 }
 
 export const EMITTER_BASE_OPACITY = 0.78;
-export const WARM_BOUNCE_BASE = 108;
-export const WARM_CORE_BASE = 48;
-export const WARM_SIDE_BASE = 18;
+// Correct outward normals expose these reflections; keep the emitter
+// warm without clipping the metal around it to white.
+export const WARM_BOUNCE_BASE = 48;
+export const WARM_CORE_BASE = 24;
+export const WARM_SIDE_BASE = 10;
 
 export function buildUFO() {
   const hullMaps = makeIndustrialMaps(29);
@@ -97,18 +99,18 @@ export function buildUFO() {
   const hullMaterial = new THREE.MeshStandardMaterial({
     color: new THREE.Color(0x4a5054),
     metalness: 0.92,
-    roughness: 0.66,
+    roughness: 0.58,
     roughnessMap: hullMaps.roughnessMap,
     bumpMap: hullMaps.bumpMap,
-    bumpScale: 0.055
+    bumpScale: 0.025
   });
   const domeMaterial = new THREE.MeshStandardMaterial({
     color: new THREE.Color(0x555c60),
     metalness: 0.90,
-    roughness: 0.58,
+    roughness: 0.64,
     roughnessMap: domeMaps.roughnessMap,
     bumpMap: domeMaps.bumpMap,
-    bumpScale: 0.045
+    bumpScale: 0.018
   });
   const jointMaterial = new THREE.MeshStandardMaterial({
     color: new THREE.Color(0x1d2225),
@@ -124,7 +126,7 @@ export function buildUFO() {
     roughness: 0.72,
     roughnessMap: hullMaps.roughnessMap,
     bumpMap: hullMaps.bumpMap,
-    bumpScale: 0.05
+    bumpScale: 0.025
   });
   const seamMaterial = new THREE.LineBasicMaterial({
     color: 0x101315, transparent: true, opacity: 0.56,
@@ -148,8 +150,10 @@ export function buildUFO() {
     [16.22, -1.57], [15.20, -1.79], [13.55, -1.99], [11.30, -2.22],
     [8.80, -2.52], [6.75, -2.79], [5.30, -3.02], [4.30, -3.17]
   ].map(([r, y]) => new THREE.Vector2(r, y));
-  const hullGeo = new THREE.LatheGeometry(hullProfile, 256);
-  hullGeo.computeVertexNormals();
+  // Lathe profiles must trace the outside from bottom to top. Reversing
+  // this top-to-bottom profile fixes culling without changing the shape.
+  // Keep LatheGeometry's analytic normals, including its closed seam.
+  const hullGeo = new THREE.LatheGeometry(hullProfile.reverse(), 256);
   const hull = new THREE.Mesh(hullGeo, hullMaterial);
   hull.castShadow = true;
   hull.receiveShadow = true;
@@ -159,8 +163,7 @@ export function buildUFO() {
   const jointProfile = [
     [14.55, 0.035], [14.87, -0.025], [14.92, -0.145], [14.61, -0.185]
   ].map(([r, y]) => new THREE.Vector2(r, y));
-  const jointGeo = new THREE.LatheGeometry(jointProfile, 256);
-  jointGeo.computeVertexNormals();
+  const jointGeo = new THREE.LatheGeometry(jointProfile.reverse(), 256);
   const joint = new THREE.Mesh(jointGeo, jointMaterial);
   joint.renderOrder = 1;
   ufo.add(joint);
@@ -172,7 +175,6 @@ export function buildUFO() {
     [0.30, 4.31], [0.00, 4.32]
   ].map(([r, y]) => new THREE.Vector2(r, y));
   const domeGeo = new THREE.LatheGeometry(domeProfile, 192);
-  domeGeo.computeVertexNormals();
   const dome = new THREE.Mesh(domeGeo, domeMaterial);
   dome.castShadow = true;
   dome.receiveShadow = true;
@@ -182,8 +184,7 @@ export function buildUFO() {
   const shoulderProfile = [
     [4.25, 1.33], [5.15, 1.27], [5.62, 1.16], [5.43, 1.08], [4.10, 1.14]
   ].map(([r, y]) => new THREE.Vector2(r, y));
-  const shoulderGeo = new THREE.LatheGeometry(shoulderProfile, 192);
-  shoulderGeo.computeVertexNormals();
+  const shoulderGeo = new THREE.LatheGeometry(shoulderProfile.reverse(), 192);
   const shoulder = new THREE.Mesh(shoulderGeo, jointMaterial);
   shoulder.castShadow = true;
   shoulder.receiveShadow = true;
@@ -254,21 +255,35 @@ export function buildUFO() {
   // Gigantic inset plates subtly vary roughness and value.
   function makeSectorPlate(r0, r1, a0, a1, material, segments = 38) {
     const positions = [];
+    const uvs = [];
     const indices = [];
+    // Follow every bend in the hull instead of bridging it with one flat
+    // strip, which can sink through the surface. Match the lathe's UVs so
+    // roughness and machining do not collapse to a single texture pixel.
+    const radii = [r0, ...upperProfileSamples.map(p => p[0]).filter(r => r > r0 && r < r1), r1];
+    const stride = radii.length;
     for (let i = 0; i <= segments; i++) {
       const t = i / segments;
       const a = THREE.MathUtils.lerp(a0, a1, t);
-      for (const r of [r0, r1]) {
+      for (const r of radii) {
         const p = surfacePoint(r, a, 0.010);
         positions.push(p.x, p.y, p.z);
+        let j = 0;
+        while(j < upperProfileSamples.length - 2 && r > upperProfileSamples[j + 1][0]) j++;
+        const fraction = (r - upperProfileSamples[j][0]) /
+          (upperProfileSamples[j + 1][0] - upperProfileSamples[j][0]);
+        uvs.push((Math.PI / 2 - a) / (Math.PI * 2), 1 - (j + fraction) / (hullProfile.length - 1));
       }
     }
     for (let i = 0; i < segments; i++) {
-      const k = i * 2;
-      indices.push(k, k + 1, k + 2, k + 1, k + 3, k + 2);
+      for(let j = 0; j < stride - 1; j++){
+        const k = i * stride + j;
+        indices.push(k, k + stride, k + 1, k + 1, k + stride, k + stride + 1);
+      }
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
     geo.setIndex(indices);
     geo.computeVertexNormals();
     const mesh = new THREE.Mesh(geo, material);
@@ -277,14 +292,14 @@ export function buildUFO() {
     return mesh;
   }
   const plateMaterialA = hullMaterial.clone();
-  plateMaterialA.color = new THREE.Color(0x43494c);
-  plateMaterialA.roughness = 0.74;
+  plateMaterialA.color = new THREE.Color(0x474d50);
+  plateMaterialA.roughness = 0.64;
   plateMaterialA.polygonOffset = true;
   plateMaterialA.polygonOffsetFactor = -1;
   plateMaterialA.polygonOffsetUnits = -1;
   const plateMaterialB = hullMaterial.clone();
-  plateMaterialB.color = new THREE.Color(0x52585b);
-  plateMaterialB.roughness = 0.62;
+  plateMaterialB.color = new THREE.Color(0x4d5356);
+  plateMaterialB.roughness = 0.56;
   plateMaterialB.polygonOffset = true;
   plateMaterialB.polygonOffsetFactor = -1;
   plateMaterialB.polygonOffsetUnits = -1;
@@ -305,8 +320,7 @@ export function buildUFO() {
   // UNDERSIDE — RECESSED, HEAVY, SIMPLE
   function lathedPart(profile, material, segments = 160) {
     const points = profile.map(([r, y]) => new THREE.Vector2(r, y));
-    const geo = new THREE.LatheGeometry(points, segments);
-    geo.computeVertexNormals();
+    const geo = new THREE.LatheGeometry(points.reverse(), segments);
     const mesh = new THREE.Mesh(geo, material);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
