@@ -407,7 +407,10 @@ let isChapter = false;
 try{ isChapter = window.self !== window.top; }catch(e){ isChapter = true; }
 if(!isChapter) startShot();
 window.addEventListener("message", (e) => {
-  if(e && e.data && e.data.type === "scene-two-start") startShot();
+  if(!e || !e.data || e.data.type !== "scene-two-start") return;
+  if(e.origin !== location.origin && !(location.protocol === "file:" && e.origin === "null")) return;
+  if(e.source !== window.parent) return;
+  startShot();
 });
 /* Reliability: never sit on a frozen frame forever if the signal is missed. */
 setTimeout(() => { if(shotStart === null) startShot(); }, 15000);

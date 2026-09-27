@@ -150,7 +150,10 @@ function transitionToSceneTwo(){
         setCut(false, REVEAL_MS);
         /* 5 — the UFO shot starts on reveal, not behind black: the rise
            into frame is the first thing seen after the machines drop. */
-        try{ frame.contentWindow.postMessage({ type: "scene-two-start" }, "*"); }catch(e){}
+        try{
+          const target = location.protocol==='file:' ? '*' : location.origin;
+          frame.contentWindow.postMessage({ type: "scene-two-start" }, target);
+        }catch(e){}
       }, remaining);
     });
   }, FADE_MS);
@@ -158,6 +161,7 @@ function transitionToSceneTwo(){
 
 window.addEventListener("message", (e) => {
   if(!e.data || e.data.type !== "scene-one-complete") return;
+  if(e.origin !== location.origin && !(location.protocol==='file:' && e.origin==='null')) return;
   if(activeScene && e.source !== activeScene.contentWindow) return;
   if(sceneOneComplete) return; // the ending fires exactly once
   sceneOneComplete = true;

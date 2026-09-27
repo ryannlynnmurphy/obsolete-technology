@@ -330,7 +330,10 @@
   let nextLagAt=3+Math.floor(Math.random()*3); // 3rd, 4th, or 5th eligible action
   function postHost(action, detail={}){
     if(window.parent===window) return;
-    window.parent.postMessage({type:'softie-os',action,...detail},'*');
+    /* Same-origin target in production; the file:// demo path is
+       isolated here and never widens deployment. */
+    const target = location.protocol==='file:' ? '*' : location.origin;
+    window.parent.postMessage({type:'softie-os',action,...detail},target);
   }
   function setBusy(on){
     const wasBusy=busyDepth>0;
@@ -650,6 +653,13 @@
   window.addEventListener('message',e=>{
     const m=e.data;
     if(!m||!['softie-os','frozen-os'].includes(m.type)||!m.appId)return;
+    if(e.origin!==location.origin&&!(location.protocol==='file:'&&e.origin==='null'))return;
+    // Only the OS's own embedded app frames may drive windows.
+    const known=[...apps.values()].some(s=>{
+      const f=s.el&&s.el.querySelector('iframe');
+      return f&&e.source===f.contentWindow;
+    });
+    if(!known)return;
     if(m.action==='close')closeWindow(m.appId);
     if(m.action==='minimize')minimizeWindow(m.appId);
     if(m.action==='maximize')toggleMaximize(m.appId);
@@ -661,7 +671,8 @@
     if(e.key==='Escape'){
       startMenu.classList.remove('open');startBtn.classList.remove('pressed');
       if(document.documentElement.classList.contains('sculpture')){
-        window.parent.postMessage({type:'softie-os',action:'exit-screen'},'*');
+        const target=location.protocol==='file:'?'*':location.origin;
+        window.parent.postMessage({type:'softie-os',action:'exit-screen'},target);
       }
     }
   });

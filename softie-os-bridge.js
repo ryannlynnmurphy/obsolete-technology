@@ -14,6 +14,9 @@ export function wireSoftieOS(options = {}) {
   const { iframe = null, controls = null, crtEffect = null } = options;
   const onEnter = typeof options.onEnter === 'function' ? options.onEnter : null;
   const onExit = typeof options.onExit === 'function' ? options.onExit : null;
+  /* Production messaging is same-origin only. The file:// demo path
+     (origin "null") is isolated here and never widens deployment. */
+  const FILE_DEV = location.protocol === 'file:';
 
   let inComputer = false;
 
@@ -85,6 +88,8 @@ export function wireSoftieOS(options = {}) {
     if (!m || typeof m !== 'object') return;
     // Backwards compatible with the earlier FrozenOS branding.
     if (m.type !== 'softie-os' && m.type !== 'frozen-os') return;
+    if (event.origin !== location.origin && !(FILE_DEV && event.origin === 'null')) return;
+    if (iframe && event.source !== iframe.contentWindow) return;
 
     if (m.action === 'latency-start') {
       forwardLatencyStart();

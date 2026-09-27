@@ -1006,8 +1006,10 @@
 
   // Sculpture bridge: Esc steps back out to orbit, every keypress flashes
   // the 3D laptop keys via postMessage (parent listens for these).
+  // Same-origin target in production; file:// demo path isolated here.
+  const PARENT_TARGET = location.protocol==='file:' ? '*' : location.origin;
   function postToParent(msg) {
-    try { window.parent.postMessage(msg, '*'); } catch {}
+    try { window.parent.postMessage(msg, PARENT_TARGET); } catch {}
   }
 
   /* Phone keyboard path: tapping the screen focuses a real input so

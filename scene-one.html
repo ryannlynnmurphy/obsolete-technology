@@ -1164,7 +1164,10 @@ function fireOrbitComplete(){
   /* Chapter handoff: the 360° release is Scene 1's ending. Notify the
      story controller (parent frame); it owns the cut to black and the
      load of Scene 2. This page keeps running its own fall-away. */
-  try{ window.parent.postMessage({ type: "scene-one-complete" }, "*"); }catch(e){}
+  try{
+    const target = location.protocol==='file:' ? '*' : location.origin;
+    window.parent.postMessage({ type: "scene-one-complete" }, target);
+  }catch(e){}
 }
 function computeFocusPose(mesh, w, h){
   mesh.updateWorldMatrix(true,false);
@@ -1340,19 +1343,30 @@ const computer = wireSoftieOS({ iframe: gameFrame, crtEffect, onExit: () => exit
 /* Field terminal on the laptop: same exit-screen contract (Esc inside
    the terminal posts to the parent), plus per-key 3D key-dip flashes. */
 const laptopComputer = wireSoftieOS({ iframe: laptopFrame, onExit: () => exitFocus() });
+/* Nested-frame senders are allow-listed: only the laptop terminal may
+   flash keys, report contact, or trigger the look-around. Production
+   is same-origin only; file:// demos stay on an isolated dev path. */
+const FILE_DEV_MSG = location.protocol === 'file:';
+function laptopMessageOk(e){
+  if(e.origin !== location.origin && !(FILE_DEV_MSG && e.origin === 'null')) return false;
+  return e.source === laptopFrame.contentWindow;
+}
 addEventListener("message", (e)=>{
   const m = e?.data;
   if(m && m.type === "field-terminal-flash" && typeof m.code === "string"){
+    if(!laptopMessageOk(e)) return;
     lap.flashKey(m.code);
     requestRender(); // 3D key dip needs frames
   }
   /* Laptop reports successful alien contact (Y branch only). The CRT
      listens: after a short propagation delay it wakes permanently. */
   if(m && m.type === "alien-contact-established"){
+    if(!laptopMessageOk(e)) return;
     requestRender(); // propagation timeout wakes again on arrival
     window.dispatchEvent(new CustomEvent("alien-contact-established"));
   }
-  if(m && m.type === "field-terminal-look-around" && e.source === laptopFrame.contentWindow){
+  if(m && m.type === "field-terminal-look-around"){
+    if(!laptopMessageOk(e)) return;
     tvBroadcast.glitch(12);
     if(!tvd.powered) setTVControl("vhf",2);
     if(crtTransmission.active){
