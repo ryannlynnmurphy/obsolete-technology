@@ -30,7 +30,7 @@
   #scene-status{position:fixed;inset:0;display:grid;place-content:center;gap:12px;
     background:#060708;color:rgba(245,245,238,.85);z-index:60;text-align:center;
     font:13px/1.6 system-ui,sans-serif;padding:24px}
-  #scene-status.failed button{background:#e8edf3;color:#0b0e13;border:0;border-radius:999px;
+  #scene-status button{background:#e8edf3;color:#0b0e13;border:0;border-radius:999px;
     padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
 </style>
 </head>
@@ -1051,6 +1051,7 @@ function verifyOrbit360(){
   captureFrozenAuthority();
   if (!frozenAuthority.captured){ console.warn("verifyOrbit360: bodies not spawned yet"); return false; }
   verifyOrbit = { frames: 0, maxDp: 0, maxDq: 0 };
+  requestRender(); // the loop may be stopped; the check needs frames
   console.log("VERIFY 360 — camera auto-orbit start, device transforms must hold Δ=0");
   return true;
 }
@@ -1339,10 +1340,13 @@ exitBtn.addEventListener("click", exitFocus);
    dips when Softie itself reports a latency moment (no random glitch).
    Esc inside Softie posts exit-screen → the bridge steps back out. */
 const crtEffect = createSoftieCRTEffect({ THREE, screenMesh: crt.display, camera });
-const computer = wireSoftieOS({ iframe: gameFrame, crtEffect, onExit: () => exitFocus() });
+/* onLatency wakes the loop: a stopped scheduler cannot poll lag. */
+const computer = wireSoftieOS({ iframe: gameFrame, crtEffect,
+  onLatency: () => requestRender(), onExit: () => exitFocus() });
 /* Field terminal on the laptop: same exit-screen contract (Esc inside
    the terminal posts to the parent), plus per-key 3D key-dip flashes. */
-const laptopComputer = wireSoftieOS({ iframe: laptopFrame, onExit: () => exitFocus() });
+const laptopComputer = wireSoftieOS({ iframe: laptopFrame,
+  onLatency: () => requestRender(), onExit: () => exitFocus() });
 /* Nested-frame senders are allow-listed: only the laptop terminal may
    flash keys, report contact, or trigger the look-around. Production
    is same-origin only; file:// demos stay on an isolated dev path. */
@@ -1565,7 +1569,7 @@ window.__sculpture = {
     source:tvBroadcast.video.currentSrc, hasSource:tvBroadcast.video.hasAttribute("src"),
     paused:tvBroadcast.video.paused, powered:tvd.powered,
     focused, cursor:renderer.domElement.style.cursor };},
-  drop(){ if(!sculptureReady) finishIntro(); fireOrbitComplete(); return falling.isFinalDrop(); },
+  drop(){ if(!sculptureReady) finishIntro(); fireOrbitComplete(); requestRender(); return falling.isFinalDrop(); },
   behind(){
     /* console-only test jump: camera to the opposite side so the facing
        guard can be verified (overlay must hide). Resets the revolution
@@ -1573,6 +1577,7 @@ window.__sculpture = {
     orbitTheta += Math.PI; applyOrbitToCamera(); _tgt.copy(ORBIT_TGT);
     camera.lookAt(_tgt); syncOrbitFromCamera(); prevAzimuth = azimuthOf();
     coherentTotal = 0; dominantDir = 0; visitedSectors = new Set([sectorOf(prevAzimuth)]);
+    requestRender();
     return { azimuth: +azimuthOf().toFixed(3), overlay: gameObj.visible };
   },
   verify(){ return verifyOrbit360(); },
@@ -1774,9 +1779,12 @@ function updateScene(now){
     schedulerDirty = true; // key travel is visible geometry motion
   }
   if(tvBroadcast.update(now)) schedulerDirty = true; // live TV draw uploads on render
-  if(softieGlitchUntil > now){
+  if(softieGlitchUntil > 0){
     updateSoftieGlitch(now);
-    moving = true; // 12s authored glitch span runs its course, then stops
+    /* Authored 12s span runs its course; the expiry tick hides the
+       overlay once so it can never freeze mid-glitch. */
+    if(softieGlitchUntil > now) moving = true;
+    else softieGlitchUntil = 0;
   }
 
   /* the CRT belongs to the game page: overlay on while powered,

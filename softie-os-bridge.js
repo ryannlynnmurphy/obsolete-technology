@@ -14,6 +14,7 @@ export function wireSoftieOS(options = {}) {
   const { iframe = null, controls = null, crtEffect = null } = options;
   const onEnter = typeof options.onEnter === 'function' ? options.onEnter : null;
   const onExit = typeof options.onExit === 'function' ? options.onExit : null;
+  const onLatency = typeof options.onLatency === 'function' ? options.onLatency : null;
   /* Production messaging is same-origin only. The file:// demo path
      (origin "null") is isolated here and never widens deployment. */
   const FILE_DEV = location.protocol === 'file:';
@@ -66,6 +67,7 @@ export function wireSoftieOS(options = {}) {
 
   function forwardLatencyStart() {
     try {
+      if (onLatency) onLatency();
       if (!crtEffect) return;
       if (typeof crtEffect.triggerLag === 'function') crtEffect.triggerLag();
       else if (typeof crtEffect.latencyStart === 'function') crtEffect.latencyStart();
