@@ -100,13 +100,7 @@
   .pdf-toolbar{height:32px;flex:0 0 32px;background:#e5e3de;border-bottom:1px solid #777;display:flex;align-items:center;padding:3px 6px;gap:4px}
   .toolbtn{height:24px;min-width:27px;padding:1px 5px;background:var(--silver)}
   .pdf-stage{flex:1;overflow:auto;padding:20px;background:#747474;display:flex;justify-content:center;align-items:flex-start}
-  .pdf-page{width:min(560px,calc(100% - 24px));aspect-ratio:8.5/11;background:#f9f8f1;box-shadow:3px 4px 10px rgba(0,0,0,.38);padding:42px 48px;color:#121212;font-family:"Times New Roman",serif;user-select:text}
-  .rx-mark{font-family:Arial,sans-serif;font-size:58px;font-weight:800;letter-spacing:-.08em;line-height:.8}
-  .rx-rule{height:5px;background:#111;margin:12px 0 16px}
-  .pdf-page h1{margin:0 0 3px;font-size:25px;font-weight:500}
-  .pdf-page .meta{font:11px Arial,sans-serif;text-transform:uppercase;letter-spacing:.15em;margin-bottom:26px}
-  .pdf-page p{font-size:13px;line-height:1.5;margin:0 0 12px}
-  .pdf-page .small{font-size:11px;color:#555;margin-top:35px}
+  .pdf-page{display:block;width:min(560px,calc(100% - 24px));height:auto;background:#fff;box-shadow:3px 4px 10px rgba(0,0,0,.38)}
 
 
   /* shutdown */
@@ -130,7 +124,6 @@
     .desktop-icon{transform:scale(.9);transform-origin:top left}
     .task-btn{min-width:85px}
     #tray{min-width:76px}
-    .pdf-page{padding:28px 30px}
   }
 </style>
 </head>
@@ -188,17 +181,9 @@
 <template id="rxTemplate">
   <div class="pdf-app">
     <div class="app-menu">File&nbsp;&nbsp; Edit&nbsp;&nbsp; View&nbsp;&nbsp; Document&nbsp;&nbsp; Help</div>
-    <div class="pdf-toolbar"><button class="toolbtn bevel">◀</button><button class="toolbtn bevel">▶</button><button class="toolbtn bevel">100%</button><button class="toolbtn bevel">⌕</button></div>
+    <div class="pdf-toolbar"><button class="toolbtn bevel">◀</button><button class="toolbtn bevel">▶</button><button class="toolbtn bevel">100%</button><button class="toolbtn bevel">⌕</button><a class="toolbtn bevel" href="./rx.pdf" target="_blank" rel="noopener" style="display:grid;place-items:center;color:#111;text-decoration:none;margin-left:auto" aria-label="Open full PDF">Open PDF ↗</a></div>
     <div class="pdf-stage">
-      <article class="pdf-page">
-        <div class="rx-mark">Rx</div><div class="rx-rule"></div>
-        <h1>Ryann Lynn Murphy</h1>
-        <div class="meta">writing / games / computers</div>
-        <p><b>rx.pdf</b></p>
-        <p>This is the document living on the machine. Replace this page with your actual PDF preview whenever you are ready; the surrounding viewer and window behavior are already wired.</p>
-        <p>The point of this desktop is not to simulate an entire operating system. It is to make every visible affordance believable: files open, windows move, buttons close, programs minimize, and the machine can shut down.</p>
-        <p class="small">SOFTIE DOCUMENT VIEWER · 1 page</p>
-      </article>
+      <img class="pdf-page" src="./Perscription.jpg" alt="Perscription, Ryann Lynn Murphy's one page résumé" loading="lazy">
     </div>
   </div>
 </template>
@@ -235,7 +220,7 @@
   if (qs.get('sculpture') === '1') document.documentElement.classList.add('sculpture');
 
   const definitions = {
-    rx: { title:'rx.pdf - Softie Document Viewer', icon:'PDF', x:115, y:58, w:650, h:540, minW:390, minH:300, template:'rxTemplate' },
+    rx: { title:'rx.pdf - Softie Document Viewer', icon:'PDF', x:115, y:58, w:650, h:540, minW:260, minH:300, template:'rxTemplate' },
     solitaire: { title:'Solitaire', icon:'♠', x:82, y:34, w:840, h:620, minW:620, minH:480, iframe:'./solitaire-app.html?embedded=1' },
     paint: { title:'Ryann Paint', icon:'✎', x:145, y:70, w:520, h:535, minW:470, minH:500, iframe:'./ryann-paint.html?embedded=1' },
     trash: { title:'Recycle Bin', icon:'▱', x:255, y:135, w:420, h:310, minW:300, minH:200, template:'trashTemplate' }
@@ -249,7 +234,7 @@
     const b=maxBounds();
     state.w=Math.max(state.minW,Math.min(state.w,b.w));
     state.h=Math.max(state.minH,Math.min(state.h,b.h));
-    state.x=Math.max(0,Math.min(state.x,Math.max(0,b.w-80)));
+    state.x=Math.max(0,Math.min(state.x,Math.max(0,b.w-state.w)));
     state.y=Math.max(0,Math.min(state.y,Math.max(0,b.h-32)));
   }
 
