@@ -128,8 +128,14 @@ const ORBIT_TGT = new THREE.Vector3(0.7, 2.4, 0); // optical center of the shot
 camera.lookAt(ORBIT_TGT);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+/* Deliberate resolution: bloom amplifies pixel cost, so the UFO is
+   the first place a lower mobile ratio is tested. Desktop unchanged. */
+function renderPixelRatio(){
+  const mobile = matchMedia("(max-width: 600px)").matches;
+  return Math.min(window.devicePixelRatio || 1, mobile ? 1.25 : 2);
+}
+renderer.setPixelRatio(renderPixelRatio());
 renderer.setSize(innerWidth, innerHeight);
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.55;
@@ -500,18 +506,23 @@ function renderUfo() {
   }
 
   controls.update();
+  const renderT0 = performance.now();
   composer.render();
   ufoStats.renders++;
+  ufoStats.renderMs = (ufoStats.renderMs || 0) + (performance.now() - renderT0);
   scheduleUfo();
 }
 window.__ufo = { stats: ufoStats, get covered(){ return contactScreenCoversScene; } };
 scheduleUfo();
 
 addEventListener("resize", () => {
+  const ratio = renderPixelRatio();
+  renderer.setPixelRatio(ratio);
+  renderer.setSize(innerWidth, innerHeight);
+  composer.setPixelRatio(ratio);
+  composer.setSize(innerWidth, innerHeight);
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
-  composer.setSize(innerWidth, innerHeight);
   /* A covered canvas needs exactly one fresh frame for the new size. */
   if(contactScreenCoversScene){ composer.render(); ufoStats.renders++; }
 });

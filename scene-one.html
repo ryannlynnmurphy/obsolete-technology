@@ -63,7 +63,10 @@ fitOverviewLens();
 
 const renderer = new THREE.WebGLRenderer({antialias:true, powerPreference:"high-performance"});
 renderer.setSize(innerWidth, innerHeight);
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+/* Text-heavy screens (Softie, terminal) need more pixels than soft glow:
+   cap at 1.5 on small viewports, 2 elsewhere. Desktop unchanged. */
+const MOBILE_QUALITY = matchMedia("(max-width: 600px)").matches;
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, MOBILE_QUALITY ? 1.5 : 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.shadowMap.autoUpdate = false;
@@ -93,7 +96,7 @@ keyLight.castShadow = true;
 keyLight.shadow.camera.left = -12; keyLight.shadow.camera.right = 12;
 keyLight.shadow.camera.top = 12; keyLight.shadow.camera.bottom = -12;
 keyLight.shadow.camera.near = 0.5; keyLight.shadow.camera.far = 40;
-keyLight.shadow.mapSize.set(2048, 2048);
+keyLight.shadow.mapSize.set(MOBILE_QUALITY ? 1024 : 2048, MOBILE_QUALITY ? 1024 : 2048);
 keyLight.shadow.bias = -0.0005;
 scene.add(keyLight);
 const rimLight = new THREE.DirectionalLight(0x9db8ff, 2.3);
