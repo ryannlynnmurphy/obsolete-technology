@@ -307,12 +307,23 @@
     #screen { padding: 18px; }
     #terminal { font-size: 13px; }
   }
+
+  /* Mobile keyboard summon: real focusable input, visually hidden.
+     16px type avoids iOS auto-zoom on focus. */
+  #kbd{position:fixed;left:8px;bottom:8px;width:32px;height:32px;opacity:0;
+    font-size:16px;border:0;padding:0}
 </style>
 </head>
 <body>
   <main id="screen" aria-label="Field terminal">
     <div id="terminal"></div>
   </main>
+  <!-- Mobile keyboard summon: a real focusable input. Tapping the
+    screen focuses it (opening the phone keyboard); typing mirrors the
+    terminal buffer. Desktop typing never touches it. -->
+  <input id="kbd" autocomplete="off" autocapitalize="none" autocorrect="off"
+    spellcheck="false" inputmode="text" enterkeyhint="go"
+    aria-label="Terminal keyboard input" />
 
 <script>
 (() => {
@@ -540,6 +551,7 @@
     row.append(prompt, typed, cursor);
     terminal.appendChild(row);
     scrollBottom();
+    syncKbd();
   }
 
   function updateTyped() {
@@ -727,6 +739,7 @@
     row.append(prompt, typed, cursor);
     terminal.appendChild(row);
     scrollBottom();
+    syncKbd();
   }
 
   function randToken(offset = 0) {
@@ -820,6 +833,7 @@
     row.append(prompt, typed, cursor);
     terminal.appendChild(row);
     scrollBottom();
+    syncKbd();
   }
 
   async function finishIntrusion() {
@@ -996,7 +1010,63 @@
     try { window.parent.postMessage(msg, '*'); } catch {}
   }
 
+  /* Phone keyboard path: tapping the screen focuses a real input so
+     the OS keyboard opens. Its value mirrors whichever buffer is
+     live; Enter submits. Desktop keydown ignores events from it. */
+  const kbd = document.getElementById('kbd');
+  function syncKbd() {
+    try { kbd.value = state.postSignal ? state.postBuffer : state.buffer; } catch {}
+  }
+  kbd.addEventListener('input', () => {
+    const v = kbd.value;
+    if (state.ended) return;
+    if (state.postSignal) {
+      state.postBuffer = v;
+      const typed = document.getElementById('typed');
+      if (typed) typed.textContent = state.postBuffer;
+      if (state.postBuffer.length >= 2) finishIntrusion();
+      return;
+    }
+    if (state.locked && !state.choosing) return;
+    if (state.choosing) {
+      state.buffer = v.slice(0, 3);
+      if (kbd.value !== state.buffer) kbd.value = state.buffer;
+      updateTyped();
+      return;
+    }
+    state.buffer = v;
+    updateTyped();
+  });
+
   document.addEventListener('keydown', async (e) => {
+    if (e.target === kbd) {
+      // Mobile path: buffer already mirrored via input; act only on
+      // Enter (submit) and Escape (step out), mirroring desktop.
+      if (e.key === 'Escape') {
+        postToParent({ type: 'softie-os', action: 'exit-screen' });
+        try { kbd.blur(); } catch {}
+        return;
+      }
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && e.code) {
+        postToParent({ type: 'field-terminal-flash', code: e.code });
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        await submit();
+        syncKbd();
+      }
+      // Desktop parity: history still works when the input has focus.
+      if (!state.choosing && !state.postSignal && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+        e.preventDefault();
+        if (!state.history.length) return;
+        if (e.key === 'ArrowUp') state.historyIndex = Math.max(0, state.historyIndex - 1);
+        else state.historyIndex = Math.min(state.history.length, state.historyIndex + 1);
+        state.buffer = state.history[state.historyIndex] ?? '';
+        updateTyped();
+        syncKbd();
+      }
+      return;
+    }
     if (e.key === 'Escape') {
       postToParent({ type: 'softie-os', action: 'exit-screen' });
       return;
@@ -1070,7 +1140,10 @@
     }
   });
 
-  screen.addEventListener('click', () => window.focus());
+  screen.addEventListener('click', () => {
+    // Focus the hidden input so the phone keyboard opens; harmless on desktop.
+    try { kbd.focus({ preventScroll: true }); } catch { window.focus(); }
+  });
   document.addEventListener('contextmenu', (e) => e.preventDefault());
   document.addEventListener('dragstart', (e) => e.preventDefault());
   boot();
