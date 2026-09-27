@@ -1750,7 +1750,7 @@ function updateScene(now){
   _sv2.set(0, 0, 1).applyQuaternion(_sq1);
   _sv3.copy(camera.position).sub(_sv1).normalize();
   const laptopFacing = _sv2.dot(_sv3);
-  if(laptopFacing > 0.12 && occlTick % 6 === 0 &&
+  if(sculptureReady && laptopFacing > 0.12 && occlTick % 6 === 0 &&
      (cameraMoved || moving || wasDirty || !laptopMaskValid)){
     updateLaptopScreenMask();
     if(laptopBlocked !== lastLaptopBlocked){
