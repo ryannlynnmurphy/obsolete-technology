@@ -100,6 +100,7 @@ scene.add(underFill);
 const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
 const _v4 = new THREE.Vector3();
 const _sv1 = new THREE.Vector3(), _sv2 = new THREE.Vector3(), _sv3 = new THREE.Vector3();
+const _sv4 = new THREE.Vector3();
 const _sq1 = new THREE.Quaternion();
 const _ray = new THREE.Raycaster(), _ptr = new THREE.Vector2();
 
@@ -1701,12 +1702,27 @@ function animate(){
   _sv3.copy(camera.position).sub(_sv1).normalize();
   const laptopFacing = _sv2.dot(_sv3);
   if(laptopFacing > 0.12 && occlTick % 6 === 0){
-    _sv3.copy(_sv1).sub(camera.position);
-    const lapDist = _sv3.length();
-    _ray.set(camera.position, _sv3.normalize());
-    _ray.far = lapDist + 1.0;
-    const lapHits = _ray.intersectObjects([tvFlight, lapFlight, crtFlight], true);
-    laptopBlocked = !(lapHits.length && (lapHits[0].object === lap.display || lap.display.children.includes(lapHits[0].object)));
+    /* CSS3D has no depth buffer. A clear center ray can leave the whole
+       iframe painted across a chassis that covers the screen's edge.
+       Hide the iframe if any sampled part is covered; the WebGL screen
+       underneath remains correctly depth-tested. */
+    laptopBlocked = false;
+    for(const x of [-0.75, 0, 0.75]){
+      for(const y of [-0.75, 0, 0.75]){
+        _sv4.set(x * lap.screenW / 2, y * lap.screenH / 2, 0);
+        lap.display.localToWorld(_sv4);
+        _sv3.copy(_sv4).sub(camera.position);
+        const sampleDist = _sv3.length();
+        _ray.set(camera.position, _sv3.normalize());
+        _ray.far = sampleDist + 0.01;
+        const lapHits = _ray.intersectObjects([tvFlight, lapFlight, crtFlight], true);
+        if(!lapHits.length || lapHits[0].object !== lap.display){
+          laptopBlocked = true;
+          break;
+        }
+      }
+      if(laptopBlocked) break;
+    }
     _ray.far = Infinity;
   }
   laptopObj.visible = laptopFacing > 0.12 && !laptopBlocked;
