@@ -725,20 +725,15 @@ const laptopMaskCanvas = document.createElement("canvas");
 laptopMaskCanvas.width = LAPTOP_OS_W;
 laptopMaskCanvas.height = LAPTOP_OS_H;
 const laptopMask = laptopMaskCanvas.getContext("2d");
-const LAPTOP_MASK_COLS = 64, LAPTOP_MASK_ROWS = 36;
+const LAPTOP_MASK_COLS = 32, LAPTOP_MASK_ROWS = 18;
 function laptopScreenVisibleAt(u, v){
   _sv4.set((u - 0.5) * lap.screenW, (0.5 - v) * lap.screenH, 0);
   lap.display.localToWorld(_sv4);
   _sv3.copy(_sv4).sub(camera.position);
   const sampleDist = _sv3.length();
   _ray.set(camera.position, _sv3.normalize());
-  /* Keep the CRT and TV in front in the sculpture's composition, even
-     when the thin laptop display plane crosses their depth. That plane
-     cannot be allowed to paint through either cabinet. */
-  _ray.far = camera.far;
-  if(_ray.intersectObjects([crtFlight, tvFlight], true).length) return false;
   _ray.far = sampleDist + 0.01;
-  const hits = _ray.intersectObjects([lapFlight], true);
+  const hits = _ray.intersectObjects([tvFlight, lapFlight, crtFlight], true);
   return hits.length > 0 && hits[0].object === lap.display;
 }
 function updateLaptopScreenMask(){
@@ -830,7 +825,7 @@ falling.init([
   {
     name: "laptop", object: lapFlight,
     delay: 0,
-    position: { x: 3.4, y: 7.6, z: -1.6 },
+    position: { x: 3.4, y: 5.6, z: -1.6 },
     rotation: { x: D2R(18), y: D2R(22), z: D2R(6) },
     velocity: { x: 0, y: 0, z: 0 },
     angularVelocity: { x: 0, y: 0, z: 0 },
@@ -854,8 +849,8 @@ falling.init([
    Orbit / focus input stays off until the freeze lands. */
 const INTRO_WAIT = 0.25, INTRO_T = 0.7, INTRO_G = -10.5;
 const introMotions = new Map([
-  [lapFlight, { startP: new THREE.Vector3(4.0, 17.2, -2.0), startR: new THREE.Euler(D2R(10), D2R(34), D2R(10)),
-    endP: new THREE.Vector3(3.4, 7.6, -1.6), endR: new THREE.Euler(D2R(18), D2R(22), D2R(6)),
+  [lapFlight, { startP: new THREE.Vector3(4.0, 15.2, -2.0), startR: new THREE.Euler(D2R(10), D2R(34), D2R(10)),
+    endP: new THREE.Vector3(3.4, 5.6, -1.6), endR: new THREE.Euler(D2R(18), D2R(22), D2R(6)),
     vel: new THREE.Vector3(), ang: new THREE.Vector3() }],
   [crtFlight, { startP: new THREE.Vector3(-4.2, 15.8, -0.2), startR: new THREE.Euler(D2R(-6), D2R(-3), D2R(-9)),
     endP: new THREE.Vector3(-3.6, 3.2, 0.0), endR: new THREE.Euler(D2R(3), D2R(9), D2R(-4)),
